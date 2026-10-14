@@ -1,0 +1,10 @@
+CampusPulse — Ressource pédagogique de démonstration
+Développement web — Fiche de révision
+
+HTTP : méthodes GET, POST, PATCH et DELETE.
+Validation : contrôler les données sur le serveur.
+Authentification : identifier un utilisateur.
+Autorisation : vérifier ses permissions sur chaque ressource.
+Accessibilité : labels, focus visible et navigation clavier.
+
+Ce support fictif sert à démontrer les fonctionnalités de la plateforme.

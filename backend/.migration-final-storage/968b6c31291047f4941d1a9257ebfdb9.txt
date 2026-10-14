@@ -1,0 +1,9 @@
+CampusPulse — Ressource pédagogique de démonstration
+Bases de données — Exercices SQL
+
+1. Créer une table étudiants avec une clé primaire.
+2. Écrire une requête SELECT filtrant les inscriptions actives.
+3. Joindre étudiants et inscriptions.
+4. Grouper les inscriptions par année universitaire.
+
+Ce support fictif sert à démontrer les fonctionnalités de la plateforme.

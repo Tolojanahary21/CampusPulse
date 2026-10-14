@@ -1,0 +1,8 @@
+CampusPulse — Ressource pédagogique de démonstration
+Algorithmique — Corrigé du TD 1
+
+Pour une recherche séquentielle, la complexité est O(n).
+Pour une recherche dichotomique sur une liste triée, elle est O(log n).
+Toujours préciser les hypothèses et tester les cas limites : liste vide, un seul élément et élément absent.
+
+Ce support fictif sert à démontrer les fonctionnalités de la plateforme.

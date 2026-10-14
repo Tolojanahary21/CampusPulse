@@ -1,0 +1,68 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+title CampusPulse — trois acteurs principaux
+actor "Administrateur\nde plateforme" as Platform
+actor "Administrateur\nd’établissement" as Campus
+actor "Étudiant" as Student
+
+rectangle CampusPulse {
+  usecase "Créer son compte étudiant\ndans un établissement actif" as Signup
+  usecase "Se connecter et gérer\nson profil" as Auth
+  usecase "Gérer établissements,\nresponsables et comptes" as Global
+  usecase "Consulter paramètres\nglobaux et audit" as Audit
+  usecase "Gérer la structure\nacadémique" as Academic
+  usecase "Inviter les membres et\nhistoriser les inscriptions" as Enroll
+  usecase "Publier et cibler\nannonces / documents" as Publish
+  usecase "Gérer les événements" as Events
+  usecase "Consulter les annonces\net événements autorisés" as Read
+  usecase "Rechercher et télécharger\nun document autorisé" as Download
+  usecase "Publier, commenter\net réagir" as Community
+  usecase "Signaler un contenu" as Report
+  usecase "Modérer et justifier\nune décision" as Moderate
+  usecase "Consulter notifications\net tableau de bord" as Dashboard
+  usecase "Consulter son\nhistorique universitaire" as History
+  usecase "Vérifier identité,\npérimètre et permissions" as Permission
+}
+
+Platform --> Global
+Platform --> Audit
+Platform --> Auth
+Platform --> Dashboard
+Campus --> Auth
+Campus --> Academic
+Campus --> Enroll
+Campus --> Publish
+Campus --> Events
+Campus --> Moderate
+Campus --> Dashboard
+Student --> Auth
+Student --> Signup
+Student --> Read
+Student --> Download
+Student --> Community
+Student --> Report
+Student --> Dashboard
+Student --> History
+Global ..> Permission : <<include>>
+Enroll ..> Permission : <<include>>
+Publish ..> Permission : <<include>>
+Download ..> Permission : <<include>>
+Read ..> Permission : <<include>>
+Community ..> Permission : <<include>>
+Moderate ..> Permission : <<include>>
+
+note bottom of Campus
+  CONTENT_PUBLISHER et MODERATOR sont des
+  délégations locales, pas de nouveaux acteurs.
+  L’administrateur de plateforme peut gérer
+  les établissements dans son périmètre global.
+end note
+
+note bottom of Signup
+  Rôle STUDENT imposé ; aucun rôle privilégié.
+  Code OTP par e-mail obligatoire avant création du compte.
+  L’administrateur attribue l’année et le niveau.
+end note
+@enduml

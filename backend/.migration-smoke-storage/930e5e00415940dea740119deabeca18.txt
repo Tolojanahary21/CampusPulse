@@ -1,0 +1,10 @@
+CampusPulse — Ressource pédagogique de démonstration
+Algorithmique — Structures de données
+
+Objectifs : comprendre les piles, files et arbres.
+
+Une pile suit le principe dernier entré, premier sorti. Une file traite les éléments dans leur ordre d’arrivée.
+
+Exercice : implémenter une pile et vérifier ses opérations avec des exemples.
+
+Ce support fictif sert à démontrer les fonctionnalités de la plateforme.

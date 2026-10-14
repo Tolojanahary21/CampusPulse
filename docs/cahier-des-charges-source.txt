@@ -1,0 +1,1851 @@
+﻿Cahier des charges complet — CampusPulse
+Version 1.0 · Projet de plateforme universitaire multi-établissements · Next.js, FastAPI et PostgreSQL
+1. Présentation générale du projet
+1.1. Nom du projet
+CampusPulse — Plateforme de partage d'informations universitaires et de ressources pédagogiques.
+1.2. Contexte
+Dans les établissements d'enseignement supérieur, les informations importantes sont souvent dispersées entre les groupes de discussion, les réseaux sociaux, les documents partagés et les communications administratives. Les étudiants peuvent ainsi manquer une annonce officielle, avoir des difficultés à trouver les supports pédagogiques de leur niveau ou ne pas savoir où consulter les informations concernant leur établissement.
+CampusPulse a pour objectif de centraliser ces informations dans une plateforme unique, organisée, sécurisée et accessible depuis un navigateur web.
+1.3. Problématique
+Comment concevoir une plateforme permettant à plusieurs établissements universitaires de gérer leurs informations officielles, de partager des ressources pédagogiques et de proposer un espace communautaire aux étudiants, tout en garantissant la confidentialité des données et la séparation des contenus ?
+1.4. Objectif général
+Développer une plateforme web multi-établissements qui facilite la communication universitaire, l'accès aux documents pédagogiques et les échanges entre étudiants.
+1.5. Objectifs spécifiques
+Centraliser les annonces officielles des établissements.
+Organiser les documents pédagogiques par établissement, année universitaire, filière, niveau et matière.
+Permettre aux étudiants de consulter uniquement les ressources auxquelles ils ont droit.
+Conserver l'historique des inscriptions des étudiants d'une année universitaire à l'autre.
+Autoriser les étudiants à publier, commenter, réagir et signaler des contenus communautaires.
+Permettre aux responsables autorisés de gérer les établissements, les comptes et les contenus.
+Mettre en place des notifications et un système de modération.
+Garantir l'isolation des données entre établissements.
+Préparer la plateforme à accueillir de nouveaux établissements sans refonte majeure.
+2. Périmètre fonctionnel
+CampusPulse sera organisé en quatre grands espaces.
+Administration de la plateforme
+Gestion globale des établissements, des comptes administrateurs, des paramètres et de la supervision générale.
+Espace officiel
+Annonces administratives, événements universitaires, commentaires autorisés et notifications officielles.
+Bibliothèque pédagogique
+Cours, exercices, corrigés, examens, fiches et autres ressources organisés selon le parcours universitaire.
+Espace communautaire
+Publications des étudiants, commentaires, réactions, signalements et modération.
+Fonctionnalités hors périmètre initial
+Pour éviter de disperser le développement, la première version ne comprendra pas obligatoirement :
+Une application mobile native.
+Une messagerie privée complète entre utilisateurs.
+Un système de visioconférence.
+Un système de gestion des notes et des examens officiels.
+Un paiement en ligne.
+Une intelligence artificielle de recommandation documentaire.
+L'architecture pourra accueillir ces fonctionnalités dans des versions ultérieures.
+3. Acteurs du système
+Le diagramme général conservera les trois acteurs principaux définis pour CampusPulse.
+3.1. Administrateur de plateforme
+Il possède les permissions globales.
+Créer, modifier, désactiver et consulter les établissements.
+Créer ou gérer les administrateurs d'établissement.
+Consulter l'état général de la plateforme.
+Gérer les paramètres globaux et les catégories communes.
+Consulter les journaux d'audit selon ses autorisations.
+3.2. Administrateur d'établissement
+Il gère les activités de son établissement dans les limites de ses permissions.
+Gérer les filières, niveaux, matières et années universitaires.
+Gérer les comptes étudiants et les inscriptions.
+Publier et gérer les annonces officielles.
+Déposer et organiser les documents pédagogiques.
+Superviser les publications communautaires.
+Traiter les signalements.
+Consulter les statistiques de son établissement.
+Certaines permissions peuvent être déléguées à des utilisateurs autorisés, sans créer un quatrième ou cinquième acteur dans le diagramme général.
+3.3. Étudiant
+Il utilise la plateforme pour accéder aux informations et participer à la communauté.
+Consulter les annonces auxquelles il a accès.
+Télécharger les documents autorisés.
+Consulter ses inscriptions et son parcours historique.
+Créer des publications communautaires.
+Commenter et réagir aux publications.
+Signaler un contenu inapproprié.
+Consulter ses notifications.
+Gérer son profil et ses préférences.
+4. Règles de gestion fondamentales
+Ces règles doivent guider la conception des tables, les API et l'interface.
+Isolation des établissements : un administrateur d'établissement ne peut pas administrer les données d'un autre établissement sans autorisation explicite.
+Historique universitaire : une inscription est liée à une année universitaire et ne doit pas être écrasée par l'inscription de l'année suivante.
+Plusieurs parcours : un étudiant peut avoir plusieurs inscriptions, y compris dans différents programmes, selon les règles définies par l'établissement.
+Contenus officiels et communautaires séparés : une publication étudiante ne devient jamais une annonce officielle simplement parce que son auteur est administrateur.
+Accès documentaire contrôlé : la visibilité d'un document dépend de son périmètre, de l'identité de l'utilisateur et de ses inscriptions pertinentes.
+Partage interétablissements explicite : un document partagé entre plusieurs établissements doit disposer d'un périmètre global ou de destinataires clairement définis.
+Permissions côté serveur : masquer un bouton dans le frontend ne constitue pas une protection suffisante.
+Fichiers privés : un utilisateur ne doit pas pouvoir télécharger un document protégé en devinant son URL.
+Modération traçable : les actions importantes de modération doivent enregistrer leur auteur, leur date et leur motif.
+Désactivation préférable à la suppression : les comptes, inscriptions et contenus liés à un historique doivent généralement être désactivés ou archivés plutôt que supprimés définitivement.
+Intégrité des relations : une inscription, un document ou une annonce ne doit pas associer arbitrairement des entités appartenant à des périmètres incompatibles.
+Dates cohérentes : stocker les dates techniques en UTC et afficher les heures dans le fuseau approprié.
+5. Architecture technique
+L'architecture sera séparée en trois couches principales.
+Frontend — Next.js + TypeScript
+Pages · composants · formulaires · navigation · gestion des sessions
+Backend — FastAPI + SQLAlchemy
+API REST · authentification · autorisations · validation · logique métier
+Données — PostgreSQL
+Relations · contraintes · index · transactions · historique
+Services complémentaires : stockage privé des fichiers, migrations Alembic, tests Pytest et sauvegardes.
+5.1. Technologies retenues
+Partie
+Technologie
+Frontend
+Next.js, React, TypeScript
+Interface
+Tailwind CSS, bibliothèque de composants au choix
+Requêtes frontend
+TanStack Query
+État client
+Zustand uniquement lorsque nécessaire
+Backend
+Python, FastAPI
+ORM
+SQLAlchemy 2.x
+Base de données
+PostgreSQL
+Migrations
+Alembic
+Validation
+Pydantic
+Authentification
+Sessions sécurisées ou JWT correctement protégés
+Stockage des fichiers
+Stockage privé local en développement, S3-compatible ensuite
+Tests backend
+Pytest
+Tests frontend
+Tests unitaires et tests de parcours selon les besoins
+Documentation API
+Swagger/OpenAPI intégré à FastAPI
+Versionnement
+Git et GitHub
+5.2. Organisation recommandée des dossiers
+CampusPulse/
+├── frontend/
+│   ├── src/
+│   │   ├── app/
+│   │   ├── components/
+│   │   ├── features/
+│   │   ├── hooks/
+│   │   ├── lib/
+│   │   ├── services/
+│   │   ├── stores/
+│   │   └── types/
+│   ├── public/
+│   └── package.json
+│
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   └── routes/
+│   │   ├── core/
+│   │   ├── db/
+│   │   ├── models/
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   ├── repositories/
+│   │   ├── permissions/
+│   │   └── main.py
+│   ├── tests/
+│   ├── alembic/
+│   ├── alembic.ini
+│   └── requirements.txt
+│
+├── docs/
+│   ├── cahier-des-charges.md
+│   ├── campuspulse-use-case.puml
+│   ├── campuspulse-class-diagram.puml
+│   └── database-schema.puml
+│
+├── .gitignore
+└── README.md
+Les repositories sont facultatifs au départ : ajoute-les si tu veux isoler les requêtes SQL de la logique métier. Il n'est pas nécessaire de créer une couche supplémentaire pour chaque petite opération.
+6. Conception complète de la base de données
+6.1. Conventions de modélisation
+La base de données PostgreSQL sera organisée autour de tables relationnelles.
+Les identifiants principaux seront des UUID (UUID), sauf besoin justifié d'un autre type.
+Les dates techniques seront généralement de type TIMESTAMPTZ.
+Les textes longs seront stockés en TEXT.
+Les données structurées seront stockées dans des colonnes adaptées, éventuellement JSONB pour les paramètres réellement variables.
+Les mots de passe seront stockés sous forme de hash sécurisé, jamais en clair.
+Les clés étrangères seront explicites et accompagnées de contraintes d'intégrité.
+Les champs de création et de modification seront présents sur les principales entités métier.
+Les noms des tables et des attributs seront en anglais pour conserver une base de code homogène.
+Les champs indiqués PK sont des clés primaires, FK des clés étrangères, UQ des valeurs uniques et NN des valeurs obligatoires. Les valeurs par défaut données ci-dessous sont des recommandations de conception.
+6.2. Module A — Utilisateurs et autorisations
+Table 1 : users
+Contient les comptes des personnes utilisant la plateforme.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+email
+VARCHAR(255)
+NN, UQ
+password_hash
+VARCHAR(255)
+NN
+first_name
+VARCHAR(100)
+NN
+last_name
+VARCHAR(100)
+NN
+phone
+VARCHAR(30)
+Nullable
+avatar_url
+TEXT
+Nullable, chemin ou URL contrôlée
+status
+VARCHAR(20)
+NN, ACTIVE, SUSPENDED, DISABLED
+email_verified_at
+TIMESTAMPTZ
+Nullable
+last_login_at
+TIMESTAMPTZ
+Nullable
+created_at
+TIMESTAMPTZ
+NN, défaut courant
+updated_at
+TIMESTAMPTZ
+NN
+deleted_at
+TIMESTAMPTZ
+Nullable, suppression logique
+Règles : l'adresse email doit être normalisée avant vérification d'unicité. deleted_at sert à l'archivage logique ; ce n'est pas un remplacement des règles de conservation des données.
+Table 2 : campuses
+Représente les établissements universitaires.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+name
+VARCHAR(200)
+NN
+code
+VARCHAR(50)
+NN, identifiant court
+slug
+VARCHAR(200)
+NN
+description
+TEXT
+Nullable
+email
+VARCHAR(255)
+Nullable
+phone
+VARCHAR(30)
+Nullable
+address
+TEXT
+Nullable
+city
+VARCHAR(100)
+Nullable
+country
+VARCHAR(100)
+NN
+logo_url
+TEXT
+Nullable
+website_url
+TEXT
+Nullable
+status
+VARCHAR(20)
+NN, ACTIVE, SUSPENDED, ARCHIVED
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+deleted_at
+TIMESTAMPTZ
+Nullable
+Contraintes : code et slug doivent être uniques. Si le produit doit autoriser le même code ou slug dans différents contextes, l'unicité peut être définie avec le périmètre approprié.
+Table 3 : campus_memberships
+Associe un utilisateur à un établissement. Cette table permet à un utilisateur d'être lié à plusieurs établissements si la politique de la plateforme l'autorise.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+user_id
+UUID
+FK → users.id, NN
+campus_id
+UUID
+FK → campuses.id, NN
+membership_type
+VARCHAR(30)
+NN, par exemple STUDENT, STAFF
+status
+VARCHAR(20)
+NN, ACTIVE, PENDING, SUSPENDED, ENDED
+joined_at
+TIMESTAMPTZ
+NN
+ended_at
+TIMESTAMPTZ
+Nullable
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+Contraintes : index sur (user_id, campus_id) et règle d'unicité adaptée pour éviter les adhésions actives en double.
+Table 4 : role_assignments
+Attribue des permissions à un utilisateur dans un périmètre donné. Cette table évite de confondre les trois acteurs principaux du diagramme avec toutes les permissions possibles.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+user_id
+UUID
+FK → users.id, NN
+role
+VARCHAR(40)
+NN
+campus_id
+UUID
+FK → campuses.id, nullable pour un rôle global
+granted_by_user_id
+UUID
+FK → users.id, nullable si initialisation système
+created_at
+TIMESTAMPTZ
+NN
+expires_at
+TIMESTAMPTZ
+Nullable
+revoked_at
+TIMESTAMPTZ
+Nullable
+Valeurs de rôle initiales possibles :
+PLATFORM_ADMIN
+CAMPUS_ADMIN
+STUDENT
+CONTENT_PUBLISHER
+MODERATOR
+Les rôles CONTENT_PUBLISHER et MODERATOR peuvent être attribués à un administrateur ou à un utilisateur délégué. Ils ne nécessitent pas de devenir des acteurs principaux dans le diagramme de cas d'utilisation.
+Règles importantes : un PLATFORM_ADMIN n'est pas lié à un seul établissement ; un rôle d'établissement doit avoir un campus_id. Une contrainte unique adaptée empêchera les attributions identiques actives en double.
+Table 5 : user_sessions
+Enregistre les sessions d'authentification si une architecture basée sur les sessions est choisie.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+user_id
+UUID
+FK → users.id, NN
+token_hash
+VARCHAR(255)
+NN, UQ
+ip_address
+INET
+Nullable
+user_agent
+TEXT
+Nullable
+created_at
+TIMESTAMPTZ
+NN
+expires_at
+TIMESTAMPTZ
+NN
+revoked_at
+TIMESTAMPTZ
+Nullable
+last_used_at
+TIMESTAMPTZ
+Nullable
+Si tu choisis des JWT sans sessions serveur, cette table peut être remplacée ou complétée par une table de révocation des refresh tokens. Ne stocke jamais un jeton de session réutilisable en clair.
+Table 6 : password_reset_tokens
+Permet de réinitialiser un mot de passe en toute sécurité.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+user_id
+UUID
+FK → users.id, NN
+token_hash
+VARCHAR(255)
+NN, UQ
+created_at
+TIMESTAMPTZ
+NN
+expires_at
+TIMESTAMPTZ
+NN
+used_at
+TIMESTAMPTZ
+Nullable
+Le token est aléatoire, à usage unique et expirant. Seul son hash est conservé.
+6.3. Module B — Structure académique
+Table 7 : academic_years
+Définit les années universitaires d'un établissement.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+campus_id
+UUID
+FK → campuses.id, NN
+label
+VARCHAR(30)
+NN, par exemple 2026-2027
+start_date
+DATE
+NN
+end_date
+DATE
+NN
+status
+VARCHAR(20)
+NN, PLANNED, ACTIVE, CLOSED
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+Contraintes : start_date < end_date, unicité de (campus_id, label) et règle métier évitant plusieurs années actives simultanément pour un même établissement, sauf besoin explicite.
+Table 8 : programs
+Représente les filières ou programmes de formation.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+campus_id
+UUID
+FK → campuses.id, NN
+code
+VARCHAR(50)
+NN
+name
+VARCHAR(200)
+NN
+description
+TEXT
+Nullable
+degree_type
+VARCHAR(50)
+Nullable, par exemple licence ou master
+duration_years
+SMALLINT
+Nullable
+status
+VARCHAR(20)
+NN, ACTIVE, INACTIVE, ARCHIVED
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+Contraintes : unicité de (campus_id, code) et duration_years > 0 si renseigné.
+Table 9 : program_levels
+Représente les niveaux d'un programme.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+program_id
+UUID
+FK → programs.id, NN
+code
+VARCHAR(30)
+NN
+name
+VARCHAR(100)
+NN, par exemple L1, L2, L3, M1, M2
+level_order
+SMALLINT
+NN
+description
+TEXT
+Nullable
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+Contraintes : unicité de (program_id, code) et ordre positif. Le niveau appartient à un programme précis.
+Table 10 : subjects
+Représente les matières, unités d'enseignement ou modules pédagogiques.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+program_level_id
+UUID
+FK → program_levels.id, NN
+code
+VARCHAR(50)
+NN
+name
+VARCHAR(200)
+NN
+description
+TEXT
+Nullable
+credits
+NUMERIC(5,2)
+Nullable
+semester
+SMALLINT
+Nullable
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+Contraintes : unicité de (program_level_id, code), crédits positifs et semestre valide selon le calendrier pédagogique.
+Table 11 : enrollments
+Historise l'inscription d'un étudiant dans un niveau de programme pour une année universitaire donnée.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+user_id
+UUID
+FK → users.id, NN
+campus_id
+UUID
+FK → campuses.id, NN
+program_level_id
+UUID
+FK → program_levels.id, NN
+academic_year_id
+UUID
+FK → academic_years.id, NN
+enrollment_number
+VARCHAR(80)
+NN
+status
+VARCHAR(20)
+NN, PENDING, ACTIVE, COMPLETED, CANCELLED, SUSPENDED
+enrolled_at
+TIMESTAMPTZ
+NN
+completed_at
+TIMESTAMPTZ
+Nullable
+notes
+TEXT
+Nullable
+created_by_user_id
+UUID
+FK → users.id, nullable
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+Règles essentielles :
+Ne pas écraser une ancienne inscription quand l'étudiant passe au niveau suivant.
+L'année universitaire et le niveau doivent appartenir au même établissement.
+L'étudiant doit disposer d'une adhésion compatible avec l'établissement.
+Un étudiant peut avoir plusieurs inscriptions si les règles métier l'autorisent.
+Définir une contrainte empêchant les doublons d'inscription correspondant à la même combinaison métier.
+Utiliser des contraintes composites ou une validation transactionnelle pour garantir la cohérence entre campus_id, program_level_id et academic_year_id.
+Table 12 : campus_settings
+Contient les paramètres spécifiques à un établissement.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+campus_id
+UUID
+FK → campuses.id, NN, UQ
+allow_announcement_comments
+BOOLEAN
+NN, défaut false
+allow_student_posts
+BOOLEAN
+NN, défaut true
+allow_student_comments
+BOOLEAN
+NN, défaut true
+allow_student_reactions
+BOOLEAN
+NN, défaut true
+max_upload_size_mb
+INTEGER
+NN
+allowed_file_types
+JSONB
+NN, liste des types autorisés
+updated_by_user_id
+UUID
+FK → users.id, nullable
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+Cette table permet de modifier certaines règles sans redéployer l'application. Le backend doit valider chaque valeur de configuration.
+6.4. Module C — Annonces officielles et événements
+Les annonces officielles sont distinctes des publications communautaires. Seuls les utilisateurs autorisés peuvent les créer et les publier.
+Table 13 : announcements
+Stocke les annonces officielles d'un établissement ou les annonces explicitement partagées à l'échelle de la plateforme.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+campus_id
+UUID
+FK → campuses.id, nullable pour une annonce réellement globale
+author_user_id
+UUID
+FK → users.id, NN
+title
+VARCHAR(250)
+NN
+slug
+VARCHAR(280)
+NN
+summary
+VARCHAR(500)
+Nullable
+content
+TEXT
+NN
+announcement_type
+VARCHAR(30)
+NN, GENERAL, ADMINISTRATIVE, ACADEMIC, EVENT, URGENT
+scope
+VARCHAR(20)
+NN, CAMPUS, TARGETED, PLATFORM
+status
+VARCHAR(20)
+NN, DRAFT, PUBLISHED, ARCHIVED
+is_pinned
+BOOLEAN
+NN, défaut false
+allow_comments
+BOOLEAN
+NN, défaut false
+published_at
+TIMESTAMPTZ
+Nullable
+starts_at
+TIMESTAMPTZ
+Nullable, début de visibilité
+ends_at
+TIMESTAMPTZ
+Nullable, fin de visibilité
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+deleted_at
+TIMESTAMPTZ
+Nullable
+Règles : campus_id doit être renseigné pour une annonce propre à un établissement. Une annonce PLATFORM doit être créée par une personne autorisée globalement. Une annonce ciblée doit avoir au moins un destinataire valide avant publication. Les périodes de visibilité doivent être cohérentes.
+Table 14 : announcement_program_targets
+Définit les programmes destinataires d'une annonce.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+announcement_id
+UUID
+PK partielle, FK → announcements.id
+program_id
+UUID
+PK partielle, FK → programs.id
+created_at
+TIMESTAMPTZ
+NN
+La clé primaire composée (announcement_id, program_id) empêche d'ajouter deux fois le même programme.
+Table 15 : announcement_level_targets
+Définit les niveaux destinataires d'une annonce.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+announcement_id
+UUID
+PK partielle, FK → announcements.id
+program_level_id
+UUID
+PK partielle, FK → program_levels.id
+created_at
+TIMESTAMPTZ
+NN
+Cette table permet de viser un niveau précis, par exemple M1, sans notifier tous les niveaux d'un programme.
+Table 16 : announcement_year_targets
+Permet de limiter une annonce à une ou plusieurs années universitaires.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+announcement_id
+UUID
+PK partielle, FK → announcements.id
+academic_year_id
+UUID
+PK partielle, FK → academic_years.id
+created_at
+TIMESTAMPTZ
+NN
+Attention : les tables de ciblage doivent respecter le périmètre de l'annonce. Pour une annonce d'établissement, les programmes, niveaux et années ciblés doivent appartenir à cet établissement. Ces règles doivent être contrôlées par le backend et, lorsque c'est possible, par des contraintes SQL.
+Table 17 : announcement_comments
+Contient les commentaires autorisés sur les annonces officielles.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+announcement_id
+UUID
+FK → announcements.id, NN
+author_user_id
+UUID
+FK → users.id, NN
+content
+TEXT
+NN
+status
+VARCHAR(20)
+NN, VISIBLE, HIDDEN, DELETED
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+deleted_at
+TIMESTAMPTZ
+Nullable
+Le backend vérifie allow_comments, le statut de l'annonce et les permissions de l'auteur avant d'accepter un commentaire.
+Table 18 : events
+Permet de gérer des événements avec des informations structurées, plutôt que de représenter chaque événement uniquement comme du texte dans une annonce.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+campus_id
+UUID
+FK → campuses.id, nullable pour événement global
+announcement_id
+UUID
+FK → announcements.id, nullable, UQ si un événement ne peut être lié qu'une fois
+created_by_user_id
+UUID
+FK → users.id, NN
+title
+VARCHAR(250)
+NN
+description
+TEXT
+NN
+location
+VARCHAR(250)
+Nullable
+starts_at
+TIMESTAMPTZ
+NN
+ends_at
+TIMESTAMPTZ
+NN
+registration_url
+TEXT
+Nullable
+status
+VARCHAR(20)
+NN, DRAFT, PUBLISHED, CANCELLED, COMPLETED
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+L'événement peut être associé à une annonce pour assurer sa communication officielle. Les dates doivent être validées pour garantir starts_at < ends_at.
+6.5. Module D — Documents pédagogiques
+Table 19 : file_assets
+Représente les fichiers physiques déposés dans le stockage privé. Les autres tables font référence à cette entité plutôt que de dupliquer le chemin du fichier.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+uploaded_by_user_id
+UUID
+FK → users.id, NN
+storage_key
+TEXT
+NN, UQ, clé interne du stockage
+original_filename
+VARCHAR(255)
+NN
+mime_type
+VARCHAR(150)
+NN
+extension
+VARCHAR(20)
+Nullable
+size_bytes
+BIGINT
+NN
+sha256_hash
+CHAR(64)
+NN
+storage_provider
+VARCHAR(30)
+NN, LOCAL, S3 ou autre fournisseur
+status
+VARCHAR(20)
+NN, PENDING, AVAILABLE, QUARANTINED, DELETED
+created_at
+TIMESTAMPTZ
+NN
+deleted_at
+TIMESTAMPTZ
+Nullable
+Sécurité : vérifier le type réel du fichier, sa taille et son contenu avant de le rendre disponible. Les noms originaux ne doivent pas servir directement de chemin de stockage. Le téléchargement passe par une autorisation côté serveur.
+Table 20 : documents
+Contient les métadonnées des ressources pédagogiques.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+campus_id
+UUID
+FK → campuses.id, nullable uniquement pour les documents globaux
+file_asset_id
+UUID
+FK → file_assets.id, NN
+uploaded_by_user_id
+UUID
+FK → users.id, NN
+subject_id
+UUID
+FK → subjects.id, nullable
+title
+VARCHAR(250)
+NN
+description
+TEXT
+Nullable
+category
+VARCHAR(30)
+NN, COURSE, EXERCISE, SOLUTION, EXAM, SUMMARY, OTHER
+scope
+VARCHAR(20)
+NN, CAMPUS, TARGETED, PLATFORM
+academic_year_label
+VARCHAR(30)
+Nullable, année affichée sur le document si pertinente
+status
+VARCHAR(20)
+NN, DRAFT, PUBLISHED, ARCHIVED, REJECTED
+published_at
+TIMESTAMPTZ
+Nullable
+download_count
+BIGINT
+NN, défaut 0
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+deleted_at
+TIMESTAMPTZ
+Nullable
+Le champ subject_id peut être nul pour un document transversal. Pour les documents de cours, il est préférable de l'utiliser afin de rattacher la ressource à une matière précise.
+Table 21 : document_program_targets
+Définit les programmes autorisés à consulter un document ciblé.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+document_id
+UUID
+PK partielle, FK → documents.id
+program_id
+UUID
+PK partielle, FK → programs.id
+created_at
+TIMESTAMPTZ
+NN
+Table 22 : document_level_targets
+Définit les niveaux autorisés à consulter un document ciblé.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+document_id
+UUID
+PK partielle, FK → documents.id
+program_level_id
+UUID
+PK partielle, FK → program_levels.id
+created_at
+TIMESTAMPTZ
+NN
+Table 23 : document_year_targets
+Définit les années universitaires autorisées à consulter un document ciblé.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+document_id
+UUID
+PK partielle, FK → documents.id
+academic_year_id
+UUID
+PK partielle, FK → academic_years.id
+created_at
+TIMESTAMPTZ
+NN
+Règles d'accès documentaire :
+CAMPUS : ressource accessible selon la politique de l'établissement.
+TARGETED : ressource réservée aux destinataires explicitement définis.
+PLATFORM : ressource partagée à l'échelle de la plateforme, uniquement si son auteur a le droit de la publier globalement.
+Les cibles doivent être cohérentes avec l'établissement et la matière du document.
+L'autorisation doit être vérifiée à chaque téléchargement.
+Les compteurs de téléchargement ne doivent être incrémentés qu'après une demande effectivement autorisée.
+Pour éviter les ambiguïtés, les cibles de programme, de niveau et d'année sont combinées selon une règle définie par le produit. Une recommandation simple consiste à considérer les dimensions renseignées comme des filtres cumulatifs, tandis que plusieurs cibles d'une même dimension sont alternatives.
+6.6. Module E — Espace communautaire
+Table 24 : community_posts
+Contient les publications créées par les utilisateurs dans l'espace communautaire.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+campus_id
+UUID
+FK → campuses.id, NN
+author_user_id
+UUID
+FK → users.id, NN
+title
+VARCHAR(250)
+Nullable
+content
+TEXT
+NN
+post_type
+VARCHAR(30)
+NN, QUESTION, DISCUSSION, RESOURCE, ANNOUNCEMENT, OTHER
+status
+VARCHAR(20)
+NN, VISIBLE, HIDDEN, UNDER_REVIEW, DELETED
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+deleted_at
+TIMESTAMPTZ
+Nullable
+Un étudiant ne peut publier que dans un espace communautaire où il est autorisé. Le type ANNOUNCEMENT ici désigne une publication communautaire et ne doit pas être confondu avec la table announcements.
+Table 25 : community_comments
+Contient les commentaires et réponses aux publications communautaires.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+post_id
+UUID
+FK → community_posts.id, NN
+author_user_id
+UUID
+FK → users.id, NN
+parent_comment_id
+UUID
+FK auto-référente → community_comments.id, nullable
+content
+TEXT
+NN
+status
+VARCHAR(20)
+NN, VISIBLE, HIDDEN, DELETED
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+deleted_at
+TIMESTAMPTZ
+Nullable
+parent_comment_id permet de gérer les réponses. Une règle métier doit empêcher les commentaires d'être rattachés à une publication différente de celle de leur parent.
+Table 26 : reactions
+Enregistre les réactions aux publications ou aux commentaires communautaires.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+user_id
+UUID
+FK → users.id, NN
+post_id
+UUID
+FK → community_posts.id, nullable
+comment_id
+UUID
+FK → community_comments.id, nullable
+reaction_type
+VARCHAR(20)
+NN, LIKE, LOVE, HELPFUL, etc.
+created_at
+TIMESTAMPTZ
+NN
+Contrainte essentielle : exactement une des colonnes post_id et comment_id doit être renseignée. Une contrainte CHECK doit le garantir. Ajouter aussi les contraintes d'unicité adaptées pour empêcher une réaction identique en double.
+Table 27 : reports
+Permet aux utilisateurs de signaler un contenu problématique.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+reporter_user_id
+UUID
+FK → users.id, NN
+post_id
+UUID
+FK → community_posts.id, nullable
+comment_id
+UUID
+FK → community_comments.id, nullable
+announcement_comment_id
+UUID
+FK → announcement_comments.id, nullable
+reason
+VARCHAR(50)
+NN, par exemple SPAM, HARASSMENT, INAPPROPRIATE, OTHER
+description
+TEXT
+Nullable
+status
+VARCHAR(20)
+NN, PENDING, UNDER_REVIEW, RESOLVED, DISMISSED
+assigned_to_user_id
+UUID
+FK → users.id, nullable
+resolution_note
+TEXT
+Nullable
+resolved_at
+TIMESTAMPTZ
+Nullable
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+Une seule cible doit être renseignée par signalement. Si tu veux aussi permettre le signalement d'annonces entières ou de documents, il faudra ajouter ces cibles explicitement ou utiliser une modélisation de signalement plus générique, sans perdre l'intégrité des clés étrangères.
+Table 28 : moderation_actions
+Conserve l'historique des décisions prises par les modérateurs.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+report_id
+UUID
+FK → reports.id, nullable
+moderator_user_id
+UUID
+FK → users.id, NN
+target_type
+VARCHAR(30)
+NN, type du contenu visé
+target_id
+UUID
+NN, identifiant du contenu
+action_type
+VARCHAR(30)
+NN, HIDE, RESTORE, DELETE, WARN, DISMISS_REPORT
+reason
+TEXT
+Nullable
+created_at
+TIMESTAMPTZ
+NN
+target_type et target_id sont pratiques pour un journal d'actions, mais ne garantissent pas seuls une clé étrangère vers toutes les tables possibles. Les cibles doivent donc être validées dans le backend, ou être remplacées par des clés étrangères typées si l'intégrité SQL stricte est prioritaire.
+6.7. Module F — Notifications et services transversaux
+Table 29 : notifications
+Stocke les notifications envoyées aux utilisateurs.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+user_id
+UUID
+FK → users.id, NN
+campus_id
+UUID
+FK → campuses.id, nullable
+type
+VARCHAR(50)
+NN, catégorie de notification
+title
+VARCHAR(250)
+NN
+message
+TEXT
+NN
+resource_type
+VARCHAR(40)
+Nullable, type de ressource liée
+resource_id
+UUID
+Nullable, identifiant de la ressource
+is_read
+BOOLEAN
+NN, défaut false
+created_at
+TIMESTAMPTZ
+NN
+read_at
+TIMESTAMPTZ
+Nullable
+Exemples de notifications : nouvelle annonce, document disponible, réponse à une publication, signalement traité ou rappel d'événement.
+Les notifications doivent être créées uniquement pour les utilisateurs qui ont réellement le droit de voir la ressource concernée.
+Table 30 : notification_preferences
+Stocke les préférences de notification de chaque utilisateur.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+user_id
+UUID
+FK → users.id, NN
+notification_type
+VARCHAR(50)
+NN
+in_app_enabled
+BOOLEAN
+NN, défaut true
+email_enabled
+BOOLEAN
+NN, défaut false
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+Contrainte : unicité de (user_id, notification_type).
+Table 31 : audit_logs
+Enregistre les actions importantes réalisées sur la plateforme.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+actor_user_id
+UUID
+FK → users.id, nullable si action système
+campus_id
+UUID
+FK → campuses.id, nullable pour action globale
+action
+VARCHAR(100)
+NN
+resource_type
+VARCHAR(50)
+NN
+resource_id
+UUID
+Nullable
+description
+TEXT
+Nullable
+metadata
+JSONB
+Nullable, données techniques filtrées
+ip_address
+INET
+Nullable
+created_at
+TIMESTAMPTZ
+NN
+Exemples : création d'un établissement, attribution d'un rôle, publication d'une annonce, changement d'inscription, modification d'une permission ou décision de modération.
+Les journaux d'audit ne doivent pas contenir de mots de passe, de tokens de session ou d'autres secrets. Leur consultation est elle-même soumise à autorisation.
+Table 32 : platform_settings
+Contient les paramètres globaux de la plateforme.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+key
+VARCHAR(100)
+NN, UQ
+value
+JSONB
+NN
+description
+TEXT
+Nullable
+updated_by_user_id
+UUID
+FK → users.id, nullable
+created_at
+TIMESTAMPTZ
+NN
+updated_at
+TIMESTAMPTZ
+NN
+Cette table est adaptée aux paramètres réellement modifiables, tels que les limites d'upload ou les options globales. Elle ne doit pas remplacer les tables relationnelles pour les établissements, les rôles ou les données métier.
+Table 33 : content_attachments
+Permet de joindre des fichiers à une publication communautaire ou à un commentaire, si cette fonctionnalité est activée.
+Attribut
+Type PostgreSQL
+Contraintes / rôle
+id
+UUID
+PK
+file_asset_id
+UUID
+FK → file_assets.id, NN
+post_id
+UUID
+FK → community_posts.id, nullable
+comment_id
+UUID
+FK → community_comments.id, nullable
+created_by_user_id
+UUID
+FK → users.id, NN
+created_at
+TIMESTAMPTZ
+NN
+Contrainte : exactement un des champs post_id et comment_id doit être renseigné. Les fichiers doivent respecter les mêmes règles de sécurité et de modération que les publications.
+Cette table est facultative pour la première version si les publications ne contiennent que du texte. Elle devient nécessaire dès que les étudiants peuvent joindre des fichiers ou des images.
+6.8. Vue d'ensemble des tables
+Les tables principales du projet sont donc les suivantes :
+Module
+Tables
+Utilisateurs et sécurité
+users, campuses, campus_memberships, role_assignments, user_sessions, password_reset_tokens
+Structure académique
+academic_years, programs, program_levels, subjects, enrollments, campus_settings
+Annonces et événements
+announcements, announcement_program_targets, announcement_level_targets, announcement_year_targets, announcement_comments, events
+Documents et fichiers
+file_assets, documents, document_program_targets, document_level_targets, document_year_targets
+Communauté et modération
+community_posts, community_comments, reactions, reports, moderation_actions, content_attachments
+Services transversaux
+notifications, notification_preferences, audit_logs, platform_settings
+Cette proposition représente 33 tables si toutes les fonctionnalités optionnelles décrites sont retenues. Tu peux commencer avec les tables essentielles et ajouter les autres au moment où le module correspondant est développé.
+6.9. Relations principales entre les tables
+Voici la logique relationnelle que le modèle SQLAlchemy devra respecter.
+users 1 → N campus_memberships
+campuses 1 → N campus_memberships
+users 1 → N role_assignments
+campuses 1 → N academic_years
+campuses 1 → N programs
+programs 1 → N program_levels
+program_levels 1 → N subjects
+users 1 → N enrollments
+academic_years 1 → N enrollments
+program_levels 1 → N enrollments
+campuses 1 → N announcements
+announcements 1 → N commentaires et cibles
+campuses 1 → N documents
+file_assets 1 → N pièces jointes, selon les règles de réutilisation choisies
+campuses 1 → N community_posts
+community_posts 1 → N community_comments
+community_posts et community_comments 1 → N reactions
+users 1 → N reports
+reports 1 → N moderation_actions
+users 1 → N notifications
+users 1 → N audit_logs
+Les cardinalités exactes devront être traduites en clés étrangères, clés primaires composées, contraintes uniques et contraintes CHECK.
+Points d'intégrité à ne pas négliger
+Le simple fait de disposer de clés étrangères ne suffit pas pour garantir la cohérence multi-établissements. Par exemple, un document ne doit pas associer un établissement A à une matière appartenant à l'établissement B.
+Pour les relations critiques, il faudra :
+Ajouter les contraintes uniques nécessaires sur les clés composites des tables parentes.
+Utiliser des clés étrangères composites lorsque la structure le permet.
+Valider les opérations métier dans une transaction SQLAlchemy.
+Ajouter des tests qui tentent explicitement de créer des associations interdites.
+Les contraintes composites doivent être conçues avec soin : une simple validation dans l'interface ne protège jamais la base de données.
+7. Sécurité et contrôle des accès
+La sécurité doit être développée dès les premières fonctionnalités, pas ajoutée à la fin.
+7.1. Authentification
+Inscription ou création de compte selon la politique retenue.
+Connexion par email et mot de passe.
+Déconnexion et invalidation de session.
+Réinitialisation du mot de passe.
+Vérification de l'email si nécessaire.
+Gestion de l'expiration et de la révocation des sessions.
+Limitation des tentatives de connexion.
+Hash des mots de passe avec Argon2id ou bcrypt, selon une configuration appropriée.
+Pour une application Next.js avec FastAPI, une session conservée dans un cookie HttpOnly, Secure en production et SameSite correctement configuré constitue une approche adaptée. Si tu choisis JWT, protège les refresh tokens, limite leur durée et prévois leur révocation.
+7.2. Autorisations
+Le backend doit vérifier, pour chaque requête :
+L'identité de l'utilisateur.
+L'état du compte.
+Son rôle et son périmètre.
+Son adhésion à l'établissement si nécessaire.
+Ses inscriptions actives ou pertinentes.
+Les permissions sur la ressource demandée.
+Le statut et la visibilité de cette ressource.
+7.3. Protection des fichiers
+Vérifier les extensions, types MIME et tailles.
+Renommer les fichiers côté serveur.
+Stocker les fichiers privés hors du répertoire public.
+Utiliser des URLs signées temporaires ou un endpoint de téléchargement contrôlé.
+Bloquer l'accès aux fichiers des autres établissements.
+Prévoir une politique de quarantaine pour les fichiers suspects.
+7.4. Autres protections
+Protection contre les injections SQL via SQLAlchemy et les requêtes paramétrées.
+Protection CSRF si l'architecture de session le nécessite.
+CORS limité aux origines autorisées.
+Validation Pydantic des entrées.
+Limitation de débit sur les endpoints sensibles.
+Gestion correcte des erreurs sans exposer les détails internes.
+Sauvegardes chiffrées et procédure de restauration testée.
+Gestion des secrets via variables d'environnement ou gestionnaire de secrets.
+8. API REST du backend FastAPI
+L'API sera organisée par domaine fonctionnel. Les exemples ci-dessous définissent le périmètre attendu ; les noms exacts pourront être ajustés pendant l'implémentation, mais il faut conserver une convention cohérente.
+Préfixe recommandé : /api/v1.
+8.1. Authentification et utilisateurs
+Méthode
+Endpoint
+Fonction
+POST
+/auth/login
+Se connecter
+POST
+/auth/logout
+Se déconnecter
+POST
+/auth/register
+Créer un compte si l'inscription publique est autorisée
+GET
+/auth/me
+Consulter l'utilisateur connecté
+POST
+/auth/forgot-password
+Demander une réinitialisation
+POST
+/auth/reset-password
+Réinitialiser le mot de passe
+GET
+/users/me
+Consulter son profil
+PATCH
+/users/me
+Modifier son profil
+PATCH
+/users/me/password
+Changer son mot de passe
+8.2. Administration de la plateforme
+Méthode
+Endpoint
+Fonction
+GET
+/platform/campuses
+Lister les établissements
+POST
+/platform/campuses
+Créer un établissement
+GET
+/platform/campuses/{campus_id}
+Consulter un établissement
+PATCH
+/platform/campuses/{campus_id}
+Modifier un établissement
+POST
+/platform/campuses/{campus_id}/admins
+Attribuer un administrateur
+GET
+/platform/users
+Rechercher les comptes
+PATCH
+/platform/users/{user_id}/status
+Changer le statut d'un compte
+GET
+/platform/audit-logs
+Consulter les journaux autorisés
+GET
+/platform/settings
+Consulter les paramètres globaux
+PATCH
+/platform/settings
+Modifier les paramètres globaux
+8.3. Administration académique
+Méthode
+Endpoint
+Fonction
+GET, POST
+/campuses/{campus_id}/academic-years
+Lister et créer les années universitaires
+PATCH
+/academic-years/{id}
+Modifier une année
+GET, POST
+/campuses/{campus_id}/programs
+Lister et créer les filières
+PATCH, DELETE
+/programs/{id}
+Modifier ou archiver une filière
+GET, POST
+/programs/{program_id}/levels
+Gérer les niveaux
+GET, POST
+/levels/{level_id}/subjects
+Gérer les matières
+GET, POST
+/campuses/{campus_id}/enrollments
+Consulter et créer les inscriptions
+GET
+/enrollments/{id}
+Consulter une inscription
+PATCH
+/enrollments/{id}
+Modifier le statut d'une inscription
+GET
+/students/{user_id}/enrollments
+Consulter l'historique d'un étudiant
+8.4. Annonces et événements
+Méthode
+Endpoint
+Fonction
+GET
+/announcements
+Lister les annonces accessibles
+POST
+/announcements
+Créer un brouillon
+GET
+/announcements/{id}
+Consulter une annonce
+PATCH
+/announcements/{id}
+Modifier une annonce
+POST
+/announcements/{id}/publish
+Publier une annonce
+POST
+/announcements/{id}/archive
+Archiver une annonce
+GET, POST
+/announcements/{id}/comments
+Consulter et ajouter des commentaires
+GET, POST
+/events
+Consulter et créer des événements
+PATCH
+/events/{id}
+Modifier un événement
+La liste publique ne doit retourner que les annonces publiées et visibles pour l'utilisateur connecté. Les filtres de recherche ne doivent pas permettre de contourner les autorisations.
+8.5. Documents pédagogiques
+Méthode
+Endpoint
+Fonction
+GET
+/documents
+Rechercher les documents autorisés
+POST
+/documents
+Créer un document ou un brouillon
+GET
+/documents/{id}
+Consulter les métadonnées
+PATCH
+/documents/{id}
+Modifier un document
+POST
+/documents/{id}/publish
+Publier un document
+POST
+/documents/{id}/archive
+Archiver un document
+POST
+/files/upload
+Téléverser un fichier
+GET
+/files/{id}/download
+Télécharger un fichier après autorisation
+8.6. Communauté et modération
+Méthode
+Endpoint
+Fonction
+GET, POST
+/community/posts
+Lister et créer des publications
+GET, PATCH, DELETE
+/community/posts/{id}
+Consulter, modifier ou retirer une publication
+GET, POST
+/community/posts/{id}/comments
+Consulter et commenter
+POST
+/community/reactions
+Ajouter ou modifier une réaction
+DELETE
+/community/reactions/{id}
+Retirer une réaction
+POST
+/reports
+Signaler un contenu
+GET
+/moderation/reports
+Lister les signalements autorisés
+PATCH
+/moderation/reports/{id}
+Traiter un signalement
+POST
+/moderation/actions
+Enregistrer une action de modération
+8.7. Notifications et tableau de bord
+Méthode
+Endpoint
+Fonction
+GET
+/notifications
+Lister ses notifications
+PATCH
+/notifications/{id}/read
+Marquer une notification comme lue
+POST
+/notifications/read-all
+Tout marquer comme lu
+GET
+/dashboard/summary
+Charger les indicateurs adaptés au rôle
+GET
+/dashboard/activity
+Consulter les activités récentes autorisées
+GET, PATCH
+/notification-preferences
+Consulter et modifier ses préférences
+Chaque endpoint doit avoir un schéma Pydantic d'entrée et de sortie, une validation des permissions, des réponses d'erreur cohérentes et des tests.
+9. Interfaces frontend à réaliser
+Le frontend doit rester organisé par fonctionnalités plutôt que de concentrer toute l'application dans quelques gros composants.
+9.1. Pages publiques et authentification
+Page d'accueil et présentation de CampusPulse.
+Connexion.
+Inscription, si elle est activée.
+Mot de passe oublié.
+Réinitialisation du mot de passe.
+Page d'erreur d'accès ou de session expirée.
+9.2. Espace administrateur de plateforme
+Tableau de bord global.
+Liste et recherche des établissements.
+Création et modification d'un établissement.
+Gestion des administrateurs d'établissement.
+Gestion des comptes et des statuts.
+Consultation des journaux d'audit.
+Paramètres globaux.
+9.3. Espace administrateur d'établissement
+Tableau de bord de l'établissement.
+Gestion des années universitaires.
+Gestion des filières, niveaux et matières.
+Gestion des étudiants et des inscriptions.
+Consultation de l'historique des inscriptions.
+Création, ciblage et publication des annonces.
+Gestion des événements.
+Gestion des documents pédagogiques.
+Modération des publications et commentaires.
+Traitement des signalements.
+Paramètres de l'établissement et statistiques.
+9.4. Espace étudiant
+Tableau de bord personnalisé.
+Fil d'annonces officielles.
+Calendrier ou liste des événements.
+Bibliothèque de documents.
+Filtres par année, filière, niveau et matière.
+Espace communautaire.
+Détail d'une publication et commentaires.
+Réactions et signalements.
+Centre de notifications.
+Profil et historique des inscriptions.
+9.5. Comportement de l'interface
+Navigation cohérente et responsive.
+États de chargement, erreur, vide et succès.
+Formulaires validés côté client et côté serveur.
+Recherche avec pagination.
+Confirmation avant une opération destructive.
+Dialogues accessibles au clavier.
+Messages d'erreur compréhensibles.
+Aucun bouton de permission ne doit remplacer le contrôle d'accès du backend.
+10. Ordre de développement du début à la fin
+Le projet doit être construit progressivement. Il est préférable de valider chaque fondation avant de multiplier les fonctionnalités.
+Étape 1 — Préparer le projet
+Créer le dépôt Git.
+Créer frontend/, backend/ et docs/.
+Installer Next.js et FastAPI.
+Préparer PostgreSQL et les variables d'environnement.
+Vérifier que le frontend, le backend et la connexion à la base fonctionnent.
+Livrable : application vide fonctionnelle, dépôt versionné et documentation de démarrage.
+Étape 2 — Concevoir et créer la base
+Finaliser le diagramme de classes.
+Finaliser le modèle relationnel avec PK, FK et contraintes.
+Définir les modèles SQLAlchemy.
+Configurer Alembic et créer la migration initiale.
+Créer les index et contraintes indispensables.
+Tester la création et la mise à jour du schéma.
+Livrable : schéma PostgreSQL cohérent et reproductible.
+Étape 3 — Authentification et permissions
+Implémenter les comptes et les sessions.
+Ajouter connexion, déconnexion et réinitialisation.
+Définir les rôles et les permissions par établissement.
+Protéger les routes et les endpoints.
+Tester les accès autorisés et interdits.
+Livrable : connexion opérationnelle avec contrôle d'accès fiable.
+Étape 4 — Multi-établissements et structure académique
+Gérer les établissements.
+Gérer les années universitaires.
+Gérer les filières, niveaux et matières.
+Gérer les adhésions et les inscriptions.
+Conserver l'historique universitaire.
+Tester l'isolation entre établissements.
+Livrable : structure académique et inscriptions utilisables.
+Étape 5 — Espace officiel
+Créer les annonces et leurs statuts.
+Ajouter le ciblage par programme, niveau et année.
+Gérer la publication et l'archivage.
+Ajouter les événements et commentaires si activés.
+Vérifier que chaque étudiant voit les annonces pertinentes.
+Livrable : publication officielle et consultation ciblée.
+Étape 6 — Bibliothèque pédagogique
+Mettre en place le stockage privé.
+Gérer les métadonnées des documents.
+Implémenter le ciblage et la recherche.
+Protéger les téléchargements.
+Tester les fichiers et les accès interdits.
+Livrable : bibliothèque documentaire sécurisée.
+Étape 7 — Espace communautaire
+Implémenter les publications et commentaires.
+Ajouter les réactions.
+Créer les signalements.
+Implémenter les actions de modération.
+Gérer les fichiers joints si cette option est retenue.
+Livrable : communauté fonctionnelle et modérable.
+Étape 8 — Notifications et tableaux de bord
+Créer les notifications.
+Ajouter les préférences.
+Développer les indicateurs par rôle.
+Ajouter les journaux d'audit.
+Éviter les notifications en double et les divulgations de données.
+Livrable : suivi des activités et tableaux de bord.
+Étape 9 — Finaliser le frontend
+Connecter toutes les pages à l'API.
+Finaliser le design responsive.
+Ajouter les états de chargement et d'erreur.
+Vérifier les parcours des trois acteurs.
+Contrôler l'accessibilité et l'ergonomie.
+Livrable : interface complète et utilisable.
+Étape 10 — Tester et sécuriser
+Exécuter les tests unitaires.
+Exécuter les tests d'intégration.
+Tester les scénarios multi-établissements.
+Tester les téléchargements protégés.
+Tester les permissions, les erreurs et les cas limites.
+Vérifier les performances des requêtes fréquentes.
+Livrable : version candidate à la mise en production.
+Étape 11 — Déployer
+Configurer les environnements de production.
+Configurer les secrets et les domaines.
+Déployer le frontend et le backend.
+Préparer PostgreSQL et le stockage privé.
+Exécuter les migrations.
+Mettre en place HTTPS, sauvegardes, journaux et supervision.
+Vérifier la restauration et les procédures de mise à jour.
+Livrable : CampusPulse accessible et maintenable en production.
+11. Plan de tests et critères de validation
+Les tests doivent couvrir le fonctionnement normal, les erreurs et les tentatives d'accès interdites.
+11.1. Tests fonctionnels
+Domaine
+Scénario
+Résultat attendu
+Authentification
+Connexion avec de bons identifiants
+Session créée
+Authentification
+Mot de passe incorrect
+Connexion refusée
+Autorisations
+Étudiant accède à l'administration
+Accès refusé
+Multi-établissements
+Administrateur A modifie les données de B
+Opération refusée
+Inscriptions
+Passage d'un niveau à un autre
+Ancienne inscription conservée
+Annonces
+Annonce ciblée sur M1
+Visible uniquement par les destinataires concernés
+Documents
+Étudiant télécharge un document autorisé
+Téléchargement réussi
+Documents
+Étudiant devine l'identifiant d'un document privé
+Accès refusé
+Communauté
+Étudiant publie un message
+Publication enregistrée
+Modération
+Signalement traité par un modérateur autorisé
+Décision enregistrée
+Notifications
+Une annonce est publiée
+Notifications créées pour les destinataires éligibles
+Audit
+Un rôle est modifié
+Action traçable
+11.2. Tests techniques
+Tests unitaires des services métier.
+Tests des modèles SQLAlchemy et des contraintes PostgreSQL.
+Tests d'intégration des endpoints FastAPI.
+Tests de permissions avec plusieurs comptes et plusieurs établissements.
+Tests des migrations Alembic.
+Tests de téléchargement et de validation des fichiers.
+Tests frontend des formulaires et composants critiques.
+Tests de parcours complet : connexion, consultation d'annonce, téléchargement d'un document et publication communautaire.
+Utilise des données de test séparées des données de production. Les tests de sécurité doivent notamment vérifier les tentatives d'accès par changement d'identifiant dans les URL ou les corps de requêtes.
+11.3. Critères d'acceptation de la première version
+CampusPulse sera considéré comme prêt pour une première mise en production lorsque :
+Les trois acteurs principaux peuvent accomplir leurs tâches.
+Les établissements sont correctement isolés.
+L'historique des inscriptions est conservé.
+Les annonces et documents respectent leurs règles de ciblage.
+Les fichiers privés ne sont pas accessibles sans autorisation.
+Les publications communautaires peuvent être modérées.
+Les notifications sont envoyées aux bons destinataires.
+Les erreurs et les permissions sont traitées côté backend.
+Les migrations et sauvegardes sont opérationnelles.
+Les tests critiques passent sans erreur bloquante.
+La documentation permet à un autre développeur d'installer et de lancer le projet.
+12. Déploiement et maintenance
+12.1. Environnements
+Prévois trois environnements logiques :
+Développement : machine locale, données fictives, stockage local.
+Test : environnement isolé permettant de valider les migrations et les fonctionnalités.
+Production : données réelles, secrets protégés, HTTPS, sauvegardes et supervision.
+Les fichiers .env contenant des secrets ne doivent jamais être commités dans Git. Fournis plutôt un .env.example sans valeurs confidentielles.
+12.2. Sauvegardes
+Sauvegarder PostgreSQL régulièrement.
+Sauvegarder séparément le stockage des fichiers.
+Conserver des sauvegardes selon une politique de rétention définie.
+Tester périodiquement une restauration complète.
+Limiter l'accès aux sauvegardes et les chiffrer lorsqu'elles contiennent des données personnelles.
+12.3. Maintenance
+Documenter les changements du schéma dans Alembic.
+Corriger les vulnérabilités des dépendances.
+Surveiller les erreurs backend et les requêtes lentes.
+Prévoir des migrations compatibles avec les mises à jour de l'application.
+Contrôler les journaux sans enregistrer de données sensibles.
+Définir une procédure pour suspendre un compte ou un établissement en cas d'incident.
+13. Livrables attendus
+À la fin du projet, les livrables doivent comprendre :
+Le cahier des charges fonctionnel et technique.
+Le diagramme de cas d'utilisation PlantUML.
+Le diagramme de classes PlantUML.
+Le modèle relationnel de la base de données.
+Le code source frontend Next.js.
+Le code source backend FastAPI.
+Les modèles SQLAlchemy et les migrations Alembic.
+Les schémas Pydantic et les endpoints documentés.
+Les tests automatisés.
+Le fichier .env.example.
+Le README avec les commandes d'installation et de démarrage.
+La documentation des permissions et des règles de gestion.
+La documentation de déploiement, de sauvegarde et de restauration.
+Une démonstration fonctionnelle des parcours administrateur de plateforme, administrateur d'établissement et étudiant.
+14. Décisions à figer avant de commencer à coder
+Quelques règles nécessitent une décision explicite, car elles influencent directement le modèle de données.
+Sujet
+Décision recommandée
+Inscription des étudiants
+Création par l'établissement, import en lot ou invitation ; inscription publique seulement si nécessaire
+Plusieurs inscriptions
+Autoriser plusieurs parcours si la politique académique le permet
+Documents globaux
+Publication réservée aux utilisateurs ayant une permission globale
+Ciblage documentaire
+Combiner les filtres renseignés selon une règle documentée
+Annonces
+Brouillon, publication et archivage ; pas de suppression physique par défaut
+Commentaires officiels
+Désactivés par défaut, activables par établissement
+Pièces jointes communautaires
+Facultatives dans la première version
+Modération
+Journaliser les décisions et leurs motifs
+Suppression des comptes
+Désactivation ou anonymisation selon les obligations de conservation
+Authentification
+Sessions sécurisées ou JWT avec gestion complète des refresh tokens
+Stockage
+Local en développement, stockage privé compatible S3 en production
+Multi-établissements
+Isolation systématique vérifiée par le backend
+15. Conclusion
+CampusPulse doit être conçu comme une plateforme multi-établissements où les données académiques, les annonces officielles, les documents pédagogiques et les publications communautaires sont séparés mais reliés par un système cohérent d'utilisateurs, d'inscriptions et de permissions.
+Le point le plus important est de finaliser le modèle relationnel avant de développer tous les CRUD. Le nombre de tables peut évoluer : les 33 tables proposées constituent une architecture cible, pas une obligation de tout construire dès le premier jour.
+L'ordre que je recommande est : base de données → authentification et permissions → structure académique → annonces → documents → communauté → notifications → tests → déploiement.
+C'est cet ordre qui limitera les modifications coûteuses, surtout pour l'historique des inscriptions, le ciblage des documents et l'isolation des établissements.
+

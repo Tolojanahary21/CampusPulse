@@ -1,0 +1,510 @@
+@startuml
+' Généré par scripts/generate_database_diagram.py ; ne charge aucune configuration.
+hide circle
+skinparam linetype ortho
+skinparam shadowing false
+title CampusPulse — schéma relationnel de la V1
+
+entity "auth_rate_limits" as auth_rate_limits {
+  * key : VARCHAR(64) <<PK>>
+  * count : INTEGER
+  * expires_at : TIMESTAMPTZ
+}
+
+entity "users" as users {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * email : VARCHAR(255) <<UQ>>
+  * password_hash : VARCHAR(255)
+  * first_name : VARCHAR(100)
+  * last_name : VARCHAR(100)
+    phone : VARCHAR(30)
+    avatar_url : TEXT
+  * status : VARCHAR(20)
+    email_verified_at : TIMESTAMPTZ
+    last_login_at : TIMESTAMPTZ
+    deleted_at : TIMESTAMPTZ
+}
+
+entity "user_sessions" as user_sessions {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * user_id : VARCHAR(36) <<FK>>
+  * token_hash : VARCHAR(64) <<UQ>>
+  * csrf_token : VARCHAR(128)
+  * expires_at : TIMESTAMPTZ
+    revoked_at : TIMESTAMPTZ
+    last_used_at : TIMESTAMPTZ
+    ip_address : VARCHAR(64)
+    user_agent : VARCHAR(512)
+}
+
+entity "password_reset_tokens" as password_reset_tokens {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * user_id : VARCHAR(36) <<FK>>
+  * token_hash : VARCHAR(64) <<UQ>>
+  * expires_at : TIMESTAMPTZ
+    used_at : TIMESTAMPTZ
+}
+
+entity "campuses" as campuses {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * name : VARCHAR(200)
+  * code : VARCHAR(50) <<UQ>>
+  * slug : VARCHAR(200) <<UQ>>
+    description : TEXT
+    email : VARCHAR(255)
+    phone : VARCHAR(30)
+    address : TEXT
+    city : VARCHAR(100)
+  * country : VARCHAR(100)
+    logo_url : TEXT
+    website_url : TEXT
+  * status : VARCHAR(20)
+    deleted_at : TIMESTAMPTZ
+}
+
+entity "campus_memberships" as campus_memberships {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * user_id : VARCHAR(36) <<FK>>
+  * campus_id : VARCHAR(36) <<FK>>
+  * membership_type : VARCHAR(30)
+  * status : VARCHAR(20)
+  * joined_at : TIMESTAMPTZ
+    ended_at : TIMESTAMPTZ
+  --
+  UQ(user_id, campus_id)
+}
+
+entity "role_assignments" as role_assignments {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * user_id : VARCHAR(36) <<FK>>
+  * role : VARCHAR(40)
+    campus_id : VARCHAR(36) <<FK>>
+    granted_by_user_id : VARCHAR(36) <<FK>>
+    expires_at : TIMESTAMPTZ
+    revoked_at : TIMESTAMPTZ
+  --
+  CHECK role_scope
+  INDEX UQ uq_active_campus_role
+  INDEX UQ uq_active_global_role
+}
+
+entity "notification_preferences" as notification_preferences {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * user_id : VARCHAR(36) <<FK,UQ>>
+  * email_announcements : BOOLEAN
+  * email_community : BOOLEAN
+}
+
+entity "academic_years" as academic_years {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * campus_id : VARCHAR(36) <<FK>>
+  * name : VARCHAR(50)
+  * starts_on : DATE
+  * ends_on : DATE
+  * status : VARCHAR(20)
+  * is_current : BOOLEAN
+  --
+  UQ(campus_id, name)
+  UQ(id, campus_id)
+  CHECK year_dates
+  INDEX UQ uq_current_academic_year
+}
+
+entity "programs" as programs {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * campus_id : VARCHAR(36) <<FK>>
+  * code : VARCHAR(50)
+  * name : VARCHAR(200)
+    description : TEXT
+  * status : VARCHAR(20)
+  --
+  UQ(campus_id, code)
+}
+
+entity "program_levels" as program_levels {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * program_id : VARCHAR(36) <<FK>>
+  * code : VARCHAR(30)
+  * name : VARCHAR(100)
+  * level_order : INTEGER
+    description : TEXT
+  * status : VARCHAR(20)
+  --
+  UQ(program_id, code)
+  CHECK level_positive_order
+}
+
+entity "subjects" as subjects {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * program_level_id : VARCHAR(36) <<FK>>
+  * code : VARCHAR(50)
+  * name : VARCHAR(200)
+    description : TEXT
+    credits : FLOAT
+    semester : INTEGER
+  * status : VARCHAR(20)
+  --
+  UQ(program_level_id, code)
+  CHECK credits_positive
+}
+
+entity "enrollments" as enrollments {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * user_id : VARCHAR(36) <<FK>>
+  * campus_id : VARCHAR(36) <<FK>>
+  * program_level_id : VARCHAR(36) <<FK>>
+  * academic_year_id : VARCHAR(36) <<FK>>
+  * enrollment_number : VARCHAR(80)
+  * status : VARCHAR(20)
+  * enrolled_at : TIMESTAMPTZ
+    completed_at : TIMESTAMPTZ
+    notes : TEXT
+    created_by_user_id : VARCHAR(36) <<FK>>
+  --
+  UQ(user_id, program_level_id, academic_year_id)
+  UQ(campus_id, enrollment_number)
+  FK(academic_year_id, campus_id) vers academic_years.id, academic_years.campus_id
+}
+
+entity "campus_settings" as campus_settings {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * campus_id : VARCHAR(36) <<FK,UQ>>
+  * allow_announcement_comments : BOOLEAN
+  * allow_student_posts : BOOLEAN
+  * allow_student_comments : BOOLEAN
+  * allow_student_reactions : BOOLEAN
+  * max_upload_size_mb : INTEGER
+    updated_by_user_id : VARCHAR(36) <<FK>>
+}
+
+entity "announcements" as announcements {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+    campus_id : VARCHAR(36) <<FK>>
+  * author_user_id : VARCHAR(36) <<FK>>
+  * title : VARCHAR(250)
+    summary : VARCHAR(500)
+  * content : TEXT
+  * announcement_type : VARCHAR(30)
+  * scope : VARCHAR(20)
+  * status : VARCHAR(20)
+  * is_pinned : BOOLEAN
+  * allow_comments : BOOLEAN
+    published_at : TIMESTAMPTZ
+    notifications_dispatched_at : TIMESTAMPTZ
+    starts_at : TIMESTAMPTZ
+    ends_at : TIMESTAMPTZ
+}
+
+entity "announcement_program_targets" as announcement_program_targets {
+  * announcement_id : VARCHAR(36) <<PK,FK>>
+  * program_id : VARCHAR(36) <<PK,FK>>
+}
+
+entity "announcement_level_targets" as announcement_level_targets {
+  * announcement_id : VARCHAR(36) <<PK,FK>>
+  * program_level_id : VARCHAR(36) <<PK,FK>>
+}
+
+entity "announcement_year_targets" as announcement_year_targets {
+  * announcement_id : VARCHAR(36) <<PK,FK>>
+  * academic_year_id : VARCHAR(36) <<PK,FK>>
+}
+
+entity "announcement_comments" as announcement_comments {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * announcement_id : VARCHAR(36) <<FK>>
+  * author_user_id : VARCHAR(36) <<FK>>
+  * content : TEXT
+  * status : VARCHAR(20)
+}
+
+entity "events" as events {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+    campus_id : VARCHAR(36) <<FK>>
+    announcement_id : VARCHAR(36) <<FK,UQ>>
+  * created_by_user_id : VARCHAR(36) <<FK>>
+  * title : VARCHAR(250)
+  * description : TEXT
+    location : VARCHAR(250)
+  * starts_at : TIMESTAMPTZ
+  * ends_at : TIMESTAMPTZ
+    registration_url : TEXT
+  * status : VARCHAR(20)
+  --
+  CHECK event_dates
+}
+
+entity "file_assets" as file_assets {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+    campus_id : VARCHAR(36) <<FK>>
+  * uploaded_by_user_id : VARCHAR(36) <<FK>>
+  * storage_key : VARCHAR(255) <<UQ>>
+  * original_filename : VARCHAR(255)
+  * mime_type : VARCHAR(150)
+  * extension : VARCHAR(20)
+  * size_bytes : INTEGER
+  * sha256_hash : VARCHAR(64)
+  * storage_provider : VARCHAR(30)
+  * status : VARCHAR(20)
+}
+
+entity "documents" as documents {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+    campus_id : VARCHAR(36) <<FK>>
+  * file_asset_id : VARCHAR(36) <<FK>>
+  * uploaded_by_user_id : VARCHAR(36) <<FK>>
+    subject_id : VARCHAR(36) <<FK>>
+  * title : VARCHAR(250)
+    description : TEXT
+  * category : VARCHAR(30)
+  * scope : VARCHAR(20)
+  * status : VARCHAR(20)
+    published_at : TIMESTAMPTZ
+  * download_count : INTEGER
+}
+
+entity "document_program_targets" as document_program_targets {
+  * document_id : VARCHAR(36) <<PK,FK>>
+  * program_id : VARCHAR(36) <<PK,FK>>
+}
+
+entity "document_level_targets" as document_level_targets {
+  * document_id : VARCHAR(36) <<PK,FK>>
+  * program_level_id : VARCHAR(36) <<PK,FK>>
+}
+
+entity "document_year_targets" as document_year_targets {
+  * document_id : VARCHAR(36) <<PK,FK>>
+  * academic_year_id : VARCHAR(36) <<PK,FK>>
+}
+
+entity "community_posts" as community_posts {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * campus_id : VARCHAR(36) <<FK>>
+  * author_user_id : VARCHAR(36) <<FK>>
+    title : VARCHAR(250)
+  * content : TEXT
+  * post_type : VARCHAR(30)
+  * status : VARCHAR(20)
+}
+
+entity "community_comments" as community_comments {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * post_id : VARCHAR(36) <<FK>>
+  * author_user_id : VARCHAR(36) <<FK>>
+    parent_comment_id : VARCHAR(36) <<FK>>
+  * content : TEXT
+  * status : VARCHAR(20)
+}
+
+entity "reactions" as reactions {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * user_id : VARCHAR(36) <<FK>>
+    post_id : VARCHAR(36) <<FK>>
+    comment_id : VARCHAR(36) <<FK>>
+  * reaction_type : VARCHAR(20)
+  --
+  UQ(user_id, post_id)
+  UQ(user_id, comment_id)
+  CHECK reaction_single_target
+}
+
+entity "reports" as reports {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * campus_id : VARCHAR(36) <<FK>>
+  * reporter_user_id : VARCHAR(36) <<FK>>
+    post_id : VARCHAR(36) <<FK>>
+    comment_id : VARCHAR(36) <<FK>>
+  * reason : VARCHAR(50)
+    description : TEXT
+  * status : VARCHAR(20)
+    resolved_by_user_id : VARCHAR(36) <<FK>>
+    resolved_at : TIMESTAMPTZ
+  --
+  CHECK report_single_target
+}
+
+entity "moderation_actions" as moderation_actions {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * campus_id : VARCHAR(36) <<FK>>
+  * moderator_user_id : VARCHAR(36) <<FK>>
+    report_id : VARCHAR(36) <<FK>>
+    post_id : VARCHAR(36) <<FK>>
+    comment_id : VARCHAR(36) <<FK>>
+  * action : VARCHAR(30)
+  * reason : TEXT
+}
+
+entity "notifications" as notifications {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * user_id : VARCHAR(36) <<FK>>
+    campus_id : VARCHAR(36) <<FK>>
+  * event_key : VARCHAR(150)
+  * notification_type : VARCHAR(30)
+  * title : VARCHAR(250)
+  * message : TEXT
+  * link : VARCHAR(500)
+    read_at : TIMESTAMPTZ
+  --
+  UQ(user_id, event_key)
+}
+
+entity "audit_logs" as audit_logs {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+    actor_user_id : VARCHAR(36) <<FK>>
+    campus_id : VARCHAR(36) <<FK>>
+  * action : VARCHAR(100)
+  * entity_type : VARCHAR(100)
+    entity_id : VARCHAR(36)
+  * details : JSON
+}
+
+entity "platform_settings" as platform_settings {
+  * id : VARCHAR(36) <<PK>>
+  * created_at : TIMESTAMPTZ
+  * updated_at : TIMESTAMPTZ
+  * key : VARCHAR(100) <<UQ>>
+  * value : JSON
+    updated_by_user_id : VARCHAR(36) <<FK>>
+}
+
+entity "mail_outbox" as mail_outbox {
+  * id : VARCHAR(36) <<PK>>
+  * recipient : VARCHAR(255)
+  * subject : VARCHAR(255)
+  * text_body : TEXT
+    html_body : TEXT
+  * status : VARCHAR(20)
+  * attempts : INTEGER
+  * created_at : TIMESTAMPTZ
+  * expires_at : TIMESTAMPTZ
+  * next_attempt_at : TIMESTAMPTZ
+    sent_at : TIMESTAMPTZ
+    last_error : VARCHAR(100)
+}
+
+users "1" -- "0..*" user_sessions : user_id
+users "1" -- "0..*" password_reset_tokens : user_id
+users "1" -- "0..*" campus_memberships : user_id
+campuses "1" -- "0..*" campus_memberships : campus_id
+users "1" -- "0..*" role_assignments : user_id
+campuses "0..1" -- "0..*" role_assignments : campus_id
+users "0..1" -- "0..*" role_assignments : granted_by_user_id
+users "1" -- "0..1" notification_preferences : user_id
+campuses "1" -- "0..*" academic_years : campus_id
+campuses "1" -- "0..*" programs : campus_id
+programs "1" -- "0..*" program_levels : program_id
+program_levels "1" -- "0..*" subjects : program_level_id
+users "1" -- "0..*" enrollments : user_id
+campuses "1" -- "0..*" enrollments : campus_id
+program_levels "1" -- "0..*" enrollments : program_level_id
+academic_years "1" -- "0..*" enrollments : academic_year_id
+users "0..1" -- "0..*" enrollments : created_by_user_id
+campuses "1" -- "0..1" campus_settings : campus_id
+users "0..1" -- "0..*" campus_settings : updated_by_user_id
+campuses "0..1" -- "0..*" announcements : campus_id
+users "1" -- "0..*" announcements : author_user_id
+announcements "1" -- "0..*" announcement_program_targets : announcement_id
+programs "1" -- "0..*" announcement_program_targets : program_id
+announcements "1" -- "0..*" announcement_level_targets : announcement_id
+program_levels "1" -- "0..*" announcement_level_targets : program_level_id
+announcements "1" -- "0..*" announcement_year_targets : announcement_id
+academic_years "1" -- "0..*" announcement_year_targets : academic_year_id
+announcements "1" -- "0..*" announcement_comments : announcement_id
+users "1" -- "0..*" announcement_comments : author_user_id
+campuses "0..1" -- "0..*" events : campus_id
+announcements "0..1" -- "0..1" events : announcement_id
+users "1" -- "0..*" events : created_by_user_id
+campuses "0..1" -- "0..*" file_assets : campus_id
+users "1" -- "0..*" file_assets : uploaded_by_user_id
+campuses "0..1" -- "0..*" documents : campus_id
+file_assets "1" -- "0..*" documents : file_asset_id
+users "1" -- "0..*" documents : uploaded_by_user_id
+subjects "0..1" -- "0..*" documents : subject_id
+documents "1" -- "0..*" document_program_targets : document_id
+programs "1" -- "0..*" document_program_targets : program_id
+documents "1" -- "0..*" document_level_targets : document_id
+program_levels "1" -- "0..*" document_level_targets : program_level_id
+documents "1" -- "0..*" document_year_targets : document_id
+academic_years "1" -- "0..*" document_year_targets : academic_year_id
+campuses "1" -- "0..*" community_posts : campus_id
+users "1" -- "0..*" community_posts : author_user_id
+community_posts "1" -- "0..*" community_comments : post_id
+users "1" -- "0..*" community_comments : author_user_id
+community_comments "0..1" -- "0..*" community_comments : parent_comment_id
+users "1" -- "0..*" reactions : user_id
+community_posts "0..1" -- "0..*" reactions : post_id
+community_comments "0..1" -- "0..*" reactions : comment_id
+campuses "1" -- "0..*" reports : campus_id
+users "1" -- "0..*" reports : reporter_user_id
+community_posts "0..1" -- "0..*" reports : post_id
+community_comments "0..1" -- "0..*" reports : comment_id
+users "0..1" -- "0..*" reports : resolved_by_user_id
+campuses "1" -- "0..*" moderation_actions : campus_id
+users "1" -- "0..*" moderation_actions : moderator_user_id
+reports "0..1" -- "0..*" moderation_actions : report_id
+community_posts "0..1" -- "0..*" moderation_actions : post_id
+community_comments "0..1" -- "0..*" moderation_actions : comment_id
+users "1" -- "0..*" notifications : user_id
+campuses "0..1" -- "0..*" notifications : campus_id
+users "0..1" -- "0..*" audit_logs : actor_user_id
+campuses "0..1" -- "0..*" audit_logs : campus_id
+users "0..1" -- "0..*" platform_settings : updated_by_user_id
+
+legend bottom
+  34 tables déclarées ; * champ obligatoire ; PK clé primaire ; FK clé étrangère ; UQ unicité.
+  Les UUID sont des VARCHAR(36). Cibles : clés primaires composées.
+  Les compatibilités entre établissements sont aussi vérifiées dans les transactions API.
+  Les contraintes CHECK sont nommées ici ; leurs expressions figurent dans les modèles et migrations.
+endlegend
+@enduml

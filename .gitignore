@@ -1,0 +1,54 @@
+# Secrets et fichiers d'environnement locaux
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.local.example
+*.pem
+*.key
+
+# Scripts et identifiants de comptes réservés à cette installation locale
+/backend/local_only/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Next.js / Node
+node_modules/
+.next/
+.next-e2e/
+out/
+*.tsbuildinfo
+npm-debug.log*
+
+# Données privées et résultats locaux
+storage/
+uploads/
+backups/
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.tar.gz
+.test-data/
+.qa/
+test-results/
+playwright-report/
+coverage/
+
+# IDE et système
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log

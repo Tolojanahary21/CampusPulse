@@ -1,0 +1,10 @@
+CampusPulse — Ressource pédagogique de démonstration
+Bases de données — Sujet d’entraînement
+
+Durée conseillée : 90 minutes.
+
+Partie 1 : dessiner le modèle relationnel d’une bibliothèque.
+Partie 2 : proposer les contraintes d’intégrité.
+Partie 3 : rédiger trois requêtes utiles pour le bibliothécaire.
+
+Ce support fictif sert à démontrer les fonctionnalités de la plateforme.

@@ -1,0 +1,178 @@
+@startuml
+hide empty members
+skinparam shadowing false
+skinparam linetype ortho
+title CampusPulse — modèle de domaine (vue simplifiée)
+
+package "Identité et autorisations" {
+  class User {
+    email
+    status
+  }
+  class Campus {
+    name
+    code
+    status
+  }
+  class CampusMembership {
+    membership_type
+    status
+  }
+  class RoleAssignment {
+    role
+    expires_at
+    revoked_at
+  }
+  class UserSession {
+    token_hash
+    expires_at
+    revoked_at
+  }
+  class PasswordResetToken {
+    token_hash
+    expires_at
+    used_at
+  }
+  class CampusSettings
+}
+package "Parcours universitaire" {
+  class AcademicYear {
+    name
+    starts_on
+    ends_on
+  }
+  class Program {
+    code
+    name
+  }
+  class ProgramLevel {
+    code
+    level_order
+  }
+  class Subject {
+    code
+    name
+  }
+  class Enrollment {
+    enrollment_number
+    status
+  }
+}
+package "Contenus officiels" {
+  class Announcement {
+    title
+    scope
+    status
+  }
+  class AnnouncementComment
+  class Event {
+    starts_at
+    ends_at
+    status
+  }
+  class Document {
+    title
+    category
+    scope
+    status
+  }
+  class FileAsset {
+    storage_key
+    mime_type
+    sha256_hash
+  }
+  class "Cibles annonce" as AnnouncementTargets
+  class "Cibles document" as DocumentTargets
+}
+package "Communauté" {
+  class CommunityPost {
+    content
+    status
+  }
+  class CommunityComment {
+    content
+    status
+  }
+  class Reaction {
+    reaction_type
+  }
+  class Report {
+    reason
+    status
+  }
+  class ModerationAction {
+    action
+    reason
+  }
+}
+package "Services transversaux" {
+  class Notification {
+    event_key
+    read_at
+  }
+  class NotificationPreference {
+    email_announcements
+    email_community
+  }
+  class AuditLog {
+    action
+    entity_type
+    entity_id
+  }
+  class PlatformSetting
+  class MailOutbox
+  class AuthRateLimit
+}
+
+User "1" -- "0..*" CampusMembership
+Campus "1" -- "0..*" CampusMembership
+User "1" -- "0..*" RoleAssignment
+Campus "0..1" -- "0..*" RoleAssignment
+User "1" -- "0..*" UserSession
+User "1" -- "0..*" PasswordResetToken
+Campus "1" -- "0..1" CampusSettings
+Campus "1" -- "0..*" AcademicYear
+Campus "1" -- "0..*" Program
+Program "1" -- "0..*" ProgramLevel
+ProgramLevel "1" -- "0..*" Subject
+User "1" -- "0..*" Enrollment
+ProgramLevel "1" -- "0..*" Enrollment
+AcademicYear "1" -- "0..*" Enrollment
+Campus "1" -- "0..*" Enrollment
+Campus "0..1" -- "0..*" Announcement
+Campus "0..1" -- "0..*" Document
+Announcement "1" -- "0..*" AnnouncementComment
+Announcement "0..1" -- "0..1" Event
+Announcement "1" *-- "0..*" AnnouncementTargets
+Document "1" *-- "0..*" DocumentTargets
+AnnouncementTargets ..> Program
+AnnouncementTargets ..> ProgramLevel
+AnnouncementTargets ..> AcademicYear
+DocumentTargets ..> Program
+DocumentTargets ..> ProgramLevel
+DocumentTargets ..> AcademicYear
+Document "0..*" -- "1" FileAsset
+Document "0..*" -- "0..1" Subject
+Campus "1" -- "0..*" CommunityPost
+User "1" -- "0..*" CommunityPost
+CommunityPost "1" -- "0..*" CommunityComment
+CommunityComment "0..1" -- "0..*" CommunityComment : parent
+Reaction ..> CommunityPost : cible exclusive
+Reaction ..> CommunityComment : cible exclusive
+Report ..> CommunityPost : cible exclusive
+Report ..> CommunityComment : cible exclusive
+Report "0..1" -- "0..*" ModerationAction
+User "1" -- "0..*" Notification
+User "1" -- "0..1" NotificationPreference
+User "0..1" -- "0..*" AuditLog
+MailOutbox ..> User : adresse destinataire
+
+note bottom of Enrollment
+  Une progression crée une nouvelle inscription.
+  Le ciblage doit être satisfait par une même inscription.
+end note
+note bottom of AnnouncementTargets
+  Chacune des deux familles représente trois tables :
+  cibles programme, niveau et année universitaire.
+end note
+@enduml
