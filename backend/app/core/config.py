@@ -20,7 +20,11 @@ class Settings(BaseSettings):
     trusted_hosts: list[str] = ['localhost', '127.0.0.1', 'testserver', 'backend']
     secret_key: str = 'development-only-replace-with-a-random-secret'
     session_cookie_name: str = 'campuspulse_session'
+    csrf_cookie_name: str = 'campuspulse_csrf'
     session_expire_hours: int = Field(default=24, ge=1, le=720)
+    database_pool_size: int = Field(default=5, ge=1, le=50)
+    database_max_overflow: int = Field(default=5, ge=0, le=50)
+    database_pool_timeout_seconds: int = Field(default=10, ge=1, le=120)
     cookie_secure: bool = False
     cookie_domain: str | None = None
     storage_path: Path = BACKEND_DIR / 'storage'
@@ -66,6 +70,16 @@ class Settings(BaseSettings):
                 raise ValueError('La production exige COOKIE_SECURE=true et FRONTEND_URL en HTTPS.')
             if self.debug or '*' in self.cors_origins or '*' in self.trusted_hosts:
                 raise ValueError('DEBUG et les origines/hôtes génériques sont interdits en production.')
+            if self.database_url.startswith('sqlite'):
+                raise ValueError('La production exige une base PostgreSQL, pas SQLite.')
+            if not self.cors_origins or any(not origin.startswith('https://') for origin in self.cors_origins):
+                raise ValueError('CORS_ORIGINS doit contenir uniquement les origines HTTPS publiques autorisées.')
+            if not self.trusted_hosts or any(host in {'localhost', '127.0.0.1', 'testserver', 'backend'} for host in self.trusted_hosts):
+                raise ValueError('TRUSTED_HOSTS doit contenir uniquement les noms d’hôtes de production.')
+            if self.cookie_domain is not None or not self.session_cookie_name.startswith('__Host-') or not self.csrf_cookie_name.startswith('__Host-'):
+                raise ValueError('En production, les cookies doivent utiliser le préfixe __Host- et aucun COOKIE_DOMAIN.')
+            if self.session_expire_hours > 24:
+                raise ValueError('La durée de session en production ne peut pas dépasser 24 heures.')
             if self.smtp_enabled and not (self.smtp_ssl or self.smtp_starttls or self.smtp_allow_insecure):
                 raise ValueError('Configurer TLS pour SMTP ou autoriser explicitement un relais privé.')
         return self

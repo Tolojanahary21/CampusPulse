@@ -7,6 +7,7 @@ import { ArrowRight, BookOpen, GraduationCap, ShieldCheck } from "lucide-react";
 import { mutate } from "@/lib/api";
 import { Button, ErrorNotice, Field, Success } from "@/components/ui";
 import { useData } from "@/hooks/use-data";
+import { label } from "@/lib/format";
 import type { Campus } from "@/types";
 import { PreferenceControls, usePreferences } from "@/components/preferences";
 import {
@@ -96,16 +97,24 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const [done, setDone] = useState(false);
   const [challenge, setChallenge] = useState<RegistrationChallenge | null>(null);
   const [registrationRestored, setRegistrationRestored] = useState(mode !== "register");
+  const invitationToken = search.get("invite");
   useEffect(() => {
-    if (mode === "register") setChallenge(restoreRegistration());
+    if (mode === "register" && !invitationToken) setChallenge(restoreRegistration());
     setRegistrationRestored(true);
-  }, [mode]);
+  }, [mode, invitationToken]);
   const registration = useData<RegistrationOptions>(
     "/auth/registration-options",
-    mode === "register",
+    mode === "register" && !invitationToken,
   );
-  const canRegister =
-    registration.data?.enabled && registration.data.campuses.length > 0;
+  const invitation = useData<{
+    campus_id: string;
+    campus_name: string;
+    role: string;
+    expires_at: string;
+  }>(`/auth/registration-link/${encodeURIComponent(invitationToken || "")}`, mode === "register" && !!invitationToken);
+  const canRegister = invitationToken
+    ? !!invitation.data
+    : registration.data?.enabled && registration.data.campuses.length > 0;
   const text = (locale === "fr" ? texts : englishTexts)[mode];
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -135,7 +144,8 @@ export function AuthForm({ mode }: { mode: Mode }) {
                 last_name: String(form.get("last_name") || "").trim(),
                 email: form.get("email"),
                 password,
-                campus_id: form.get("campus_id"),
+                campus_id: invitation.data?.campus_id || form.get("campus_id"),
+                ...(invitationToken ? { invitation_token: invitationToken } : {}),
               }
             : mode === "forgot-password"
               ? { email: form.get("email") }
@@ -215,9 +225,13 @@ export function AuthForm({ mode }: { mode: Mode }) {
           </p>
           <h1>{mode === "register" && challenge && !done
             ? t("Vérifiez votre adresse email.", "Verify your email address.")
+            : mode === "register" && invitation.data
+              ? t(`Rejoignez ${invitation.data.campus_name}.`, `Join ${invitation.data.campus_name}.`)
             : text.title}</h1>
           <p className="muted">{mode === "register" && challenge && !done
             ? t("Une dernière étape pour rejoindre votre campus.", "One last step before joining your campus.")
+            : mode === "register" && invitation.data
+              ? t(`Créez votre compte ${label(invitation.data.role, locale).toLowerCase()}. Votre adresse e-mail sera vérifiée avant son activation.`, `Create your ${label(invitation.data.role, locale).toLowerCase()} account. Your email will be verified before it is activated.`)
             : text.description}</p>
           {done ? (
             <>
@@ -229,8 +243,12 @@ export function AuthForm({ mode }: { mode: Mode }) {
                     )
                   : mode === "register"
                     ? t(
-                        "Votre compte étudiant a été créé. Connectez-vous avec votre adresse email et votre mot de passe. L’administration pourra ensuite vous inscrire dans votre filière et votre niveau.",
-                        "Your student account has been created. Sign in with your email and password. Your administrator can then enrol you in your programme and year level.",
+                        invitation.data
+                          ? `Votre compte ${label(invitation.data.role, locale).toLowerCase()} a été créé. Vous pouvez maintenant vous connecter.`
+                          : "Votre compte étudiant a été créé. Connectez-vous avec votre adresse email et votre mot de passe. L’administration pourra ensuite vous inscrire dans votre filière et votre niveau.",
+                        invitation.data
+                          ? `Your ${label(invitation.data.role, locale).toLowerCase()} account is ready. You can now sign in.`
+                          : "Your student account has been created. Sign in with your email and password. Your administrator can then enrol you in your programme and year level.",
                       )
                     : t(
                         "Votre mot de passe a été enregistré. Vous pouvez maintenant vous connecter.",
@@ -253,11 +271,18 @@ export function AuthForm({ mode }: { mode: Mode }) {
               onVerified={() => { setChallenge(null); setDone(true); }}
               onRestart={() => { setChallenge(null); setError(undefined); }}
             />
-          ) : mode === "register" && registration.isPending ? (
+          ) : mode === "register" && invitationToken && invitation.isPending ? (
+            <p className="notice" role="status">{t("Vérification du lien d’inscription…", "Checking your registration link…")}</p>
+          ) : mode === "register" && invitationToken && invitation.error ? (
+            <>
+              <ErrorNotice error={invitation.error} />
+              <Link href="/login" className="button secondary">{t("Retour à la connexion", "Back to sign in")}</Link>
+            </>
+          ) : mode === "register" && !invitationToken && registration.isPending ? (
             <p className="notice" role="status">
               {t("Chargement des établissements…", "Loading institutions…")}
             </p>
-          ) : mode === "register" && registration.error ? (
+          ) : mode === "register" && !invitationToken && registration.error ? (
             <>
               <ErrorNotice error={registration.error} />
               <Button
@@ -268,7 +293,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
                 {t("Réessayer", "Try again")}
               </Button>
             </>
-          ) : mode === "register" && !canRegister ? (
+          ) : mode === "register" && !invitationToken && !canRegister ? (
             <p className="notice" role="status">
               {registration.data?.enabled
                 ? t(
@@ -303,21 +328,21 @@ export function AuthForm({ mode }: { mode: Mode }) {
                       />
                     </Field>
                   </div>
-                  <Field label={t("Votre établissement", "Your institution")}>
-                    <select name="campus_id" required defaultValue="">
-                      <option value="" disabled>
-                        {t(
-                          "Choisir mon établissement",
-                          "Choose my institution",
-                        )}
-                      </option>
-                      {registration.data?.campuses.map((campus) => (
-                        <option key={campus.id} value={campus.id}>
-                          {campus.name} ({campus.code})
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
+                  {invitation.data ? (
+                    <div className="notice" role="status">
+                      {t("Inscription pour", "Registration for")} <strong>{invitation.data.campus_name}</strong>
+                      <span> · {label(invitation.data.role, locale)}</span>
+                    </div>
+                  ) : (
+                    <Field label={t("Votre établissement", "Your institution")}>
+                      <select name="campus_id" required defaultValue="">
+                        <option value="" disabled>{t("Choisir mon établissement", "Choose my institution")}</option>
+                        {registration.data?.campuses.map((campus) => (
+                          <option key={campus.id} value={campus.id}>{campus.name} ({campus.code})</option>
+                        ))}
+                      </select>
+                    </Field>
+                  )}
                 </>
               )}
               {(mode === "login" ||
@@ -388,7 +413,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
                 </Link>
               )}
               <Button type="submit" busy={busy} className="full-width">
-                {text.button}
+                {invitationToken ? t("Créer mon compte", "Create my account") : text.button}
                 <ArrowRight size={17} />
               </Button>
             </form>
@@ -410,7 +435,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
               </Link>
             </p>
           )}
-          {mode === "register" && (
+          {mode === "register" && !invitationToken && (
             <p className="small muted">
               {t("Déjà inscrit ?", "Already registered?")}{" "}
               <Link href="/login" className="auth-text-link">
@@ -432,6 +457,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
             "Une plateforme conçue pour apprendre ensemble.",
             "A platform designed for learning together.",
           )}
+          <br />© {new Date().getFullYear()} Tolojanahary · CampusPulse
         </p>
       </section>
     </main>

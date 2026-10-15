@@ -53,12 +53,25 @@ class PasswordResetToken(Entity, Base):
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class RegistrationLink(Entity, Base):
+    """One-use, role-scoped registration links created by platform admins."""
+    __tablename__ = 'registration_links'
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    campus_id: Mapped[str] = mapped_column(ForeignKey('campuses.id'), index=True)
+    role: Mapped[str] = mapped_column(String(40))
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class StudentRegistration(Entity, Base):
     """Unverified signups have no user, session, membership or role."""
     __tablename__ = 'student_registrations'
     __table_args__ = (CheckConstraint('attempts >= 0', name='registration_attempts_positive'),)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     campus_id: Mapped[str] = mapped_column(ForeignKey('campuses.id'), index=True)
+    role: Mapped[str] = mapped_column(String(40), default='STUDENT')
+    registration_link_id: Mapped[str | None] = mapped_column(ForeignKey('registration_links.id'))
     first_name: Mapped[str] = mapped_column(String(100))
     last_name: Mapped[str] = mapped_column(String(100))
     password_hash: Mapped[str] = mapped_column(String(255))

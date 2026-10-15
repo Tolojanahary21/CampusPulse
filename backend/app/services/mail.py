@@ -3,6 +3,7 @@ import logging
 import smtplib
 import ssl
 from datetime import datetime, timedelta
+from html import escape
 from email.message import EmailMessage
 from email.utils import formataddr
 from uuid import uuid4
@@ -16,6 +17,42 @@ from app.db.base import Base
 from app.db.session import SessionLocal
 
 logger = logging.getLogger(__name__)
+
+
+def branded_email(title: str, preheader: str, greeting: str, paragraphs: list[str], *, button_text: str | None = None, button_url: str | None = None, verification_code: str | None = None) -> str:
+    """Responsive, email-client-safe CampusPulse HTML with a plain inline footer."""
+    safe_title = escape(title)
+    safe_greeting = escape(greeting)
+    safe_paragraphs = ''.join(
+        f'<p style="margin:0 0 16px;color:#43515c;font-size:15px;line-height:1.7">{escape(paragraph).replace(chr(10), "<br>")}</p>'
+        for paragraph in paragraphs
+    )
+    cta = ''
+    if button_text and button_url:
+        cta = (f'<p style="margin:28px 0"><a href="{escape(button_url, quote=True)}" '
+               f'style="display:inline-block;background:#126b65;color:#fff;text-decoration:none;font-weight:700;'
+               f'padding:14px 22px;border-radius:10px">{escape(button_text)}</a></p>')
+    code_card = ''
+    if verification_code:
+        code_card = (f'<div style="margin:25px 0;padding:18px;text-align:center;background:#f0f7f4;border:1px solid #d9ebe3;'
+                     f'border-radius:12px;color:#145f57;font-size:30px;font-weight:700;letter-spacing:8px">{escape(verification_code)}</div>')
+    year = utcnow().year
+    return (
+        '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        f'<title>{safe_title}</title></head><body style="margin:0;background:#f2f5f3;font-family:Arial,Helvetica,sans-serif">'
+        f'<div style="display:none;max-height:0;overflow:hidden;opacity:0">{escape(preheader)}</div>'
+        '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f2f5f3;padding:32px 12px"><tr><td align="center">'
+        '<table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#fff;border-radius:18px;overflow:hidden">'
+        '<tr><td style="background:#123c3a;padding:25px 32px"><div style="color:#fff;font-size:22px;font-weight:700;letter-spacing:-.4px">Campus<span style="color:#86d3bd">Pulse</span></div>'
+        '<div style="margin-top:6px;color:#b9d4cd;font-size:11px;letter-spacing:1.5px">LE CAMPUS QUI VOUS RELIE</div></td></tr>'
+        f'<tr><td style="padding:34px 32px 22px"><h1 style="margin:0 0 23px;color:#183c3a;font-size:25px;line-height:1.25">{safe_title}</h1>'
+        f'<p style="margin:0 0 16px;color:#43515c;font-size:15px;line-height:1.7">Bonjour {safe_greeting},</p>{safe_paragraphs}{code_card}{cta}'
+        '<p style="margin:25px 0 0;color:#43515c;font-size:15px;line-height:1.7">À bientôt sur votre campus,<br><strong>L’équipe CampusPulse</strong></p></td></tr>'
+        f'<tr><td style="padding:19px 32px;background:#f8faf9;border-top:1px solid #e7eeea;color:#718078;font-size:12px;line-height:1.7">'
+        f'<strong style="color:#315a50">Tolojanahary</strong> · © {year} CampusPulse<br>Ce message automatique concerne votre compte CampusPulse. '
+        'Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer ce courriel.</td></tr>'
+        '</table></td></tr></table></body></html>'
+    )
 
 
 class MailOutbox(Base):

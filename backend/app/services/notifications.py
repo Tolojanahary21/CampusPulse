@@ -4,7 +4,7 @@ from sqlalchemy import or_, select
 from app.core.config import settings
 from app.models import Announcement, Notification, NotificationPreference, User, utcnow
 from app.permissions import aware, can_view_content
-from app.services.mail import queue_email
+from app.services.mail import branded_email, queue_email
 
 
 def notify_publication(db, obj):
@@ -29,8 +29,11 @@ def notify_publication(db, obj):
             preference = db.scalar(select(NotificationPreference).where(NotificationPreference.user_id == recipient.id))
             if preference is None or preference.email_announcements:
                 subject = f'CampusPulse — {" ".join(obj.title.splitlines())}'[:255]
+                url = f'{settings.frontend_url.rstrip("/")}{link}'
                 queue_email(db, recipient.email, subject,
-                            f'Bonjour {recipient.first_name},\n\nUne annonce vous concerne : {obj.title}\n\nConsultez-la dans votre espace sécurisé : {settings.frontend_url.rstrip("/")}{link}\n\nCampusPulse')
+                            f'Bonjour {recipient.first_name},\n\nUne annonce vous concerne : {obj.title}\n\nConsultez-la dans votre espace sécurisé : {url}\n\nCampusPulse',
+                            branded_email('Une nouvelle annonce vous concerne', 'Une actualité de votre campus est disponible.', recipient.first_name,
+                                          [obj.title], button_text='Voir l’annonce', button_url=url))
     if isinstance(obj, Announcement):
         obj.notifications_dispatched_at = now
     db.flush()

@@ -18,6 +18,7 @@ export interface User {
   first_name: string;
   last_name: string;
   phone?: string;
+  avatar_url?: string | null;
   status: string;
   roles: { id: string; role: Role; campus_id: string | null }[];
   campuses: Campus[];

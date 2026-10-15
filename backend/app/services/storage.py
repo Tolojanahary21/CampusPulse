@@ -73,3 +73,26 @@ async def save_upload(upload: UploadFile, maximum_mb: int):
     path.write_bytes(data)
     return dict(storage_key=key, original_filename=name, extension=extension,
                 mime_type=TYPES[extension], size_bytes=len(data), sha256_hash=hashlib.sha256(data).hexdigest())
+
+
+async def save_avatar(upload: UploadFile, maximum_mb: int = 5):
+    """Save a small raster profile image after checking its signature."""
+    name = (upload.filename or '').replace('\\', '/').rsplit('/', 1)[-1]
+    extension = Path(name).suffix.lower()
+    if extension not in {'.png', '.jpg', '.jpeg'}:
+        raise HTTPException(422, 'Choisissez une image PNG ou JPEG.')
+    data = await upload.read(maximum_mb * 1024 * 1024 + 1)
+    if not data:
+        raise HTTPException(422, 'Le fichier image est vide.')
+    if len(data) > maximum_mb * 1024 * 1024:
+        raise HTTPException(413, 'La photo ne peut pas dépasser 5 Mo.')
+    valid = (extension == '.png' and data.startswith(b'\x89PNG\r\n\x1a\n') and b'IEND' in data[-32:]) or (
+        extension in {'.jpg', '.jpeg'} and data.startswith(b'\xff\xd8\xff') and data.endswith(b'\xff\xd9')
+    )
+    if not valid:
+        raise HTTPException(422, 'Le contenu ne correspond pas à une image PNG ou JPEG valide.')
+    key = f'avatar-{uuid4().hex}{extension}'
+    path = file_path(key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return key

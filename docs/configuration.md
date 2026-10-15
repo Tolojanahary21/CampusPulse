@@ -22,8 +22,9 @@ Les noms précis et les valeurs par défaut sont définis dans `backend/.env.exa
 | `FRONTEND_URL` | URL externe du frontend, utilisée pour les liens d’invitation et de réinitialisation |
 | `CORS_ORIGINS` | Liste JSON explicite des origines autorisées, par exemple `["http://localhost:3000"]` |
 | `TRUSTED_HOSTS` | Liste JSON des noms d’hôtes acceptés ; ajouter le domaine public en production |
-| `COOKIE_SECURE`, `SESSION_COOKIE_NAME`, `SESSION_EXPIRE_HOURS` | Protection et durée de la session ; `COOKIE_SECURE=true` avec HTTPS |
-| `COOKIE_DOMAIN` | Domaine partagé optionnel pour des sous-domaines ; préférer un même domaine public |
+| `COOKIE_SECURE`, `SESSION_COOKIE_NAME`, `CSRF_COOKIE_NAME`, `SESSION_EXPIRE_HOURS` | Protection et durée de la session ; en production utiliser `COOKIE_SECURE=true`, les noms `__Host-campuspulse_session` et `__Host-campuspulse_csrf`, et une durée maximale de 24 h |
+| `COOKIE_DOMAIN` | Doit rester vide en production avec les cookies `__Host-`; publier idéalement l’API sous le même nom d’hôte que l’interface |
+| `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`, `DATABASE_POOL_TIMEOUT_SECONDS` | Connexions maximales et attente avant saturation du pool, par processus API/worker |
 | `PASSWORD_RESET_EXPIRE_MINUTES`, `INVITATION_EXPIRE_HOURS` | Validité respective des réinitialisations et invitations |
 | `PUBLIC_REGISTRATION_ENABLED` | `true` par défaut : inscription étudiante publique ; `false` ferme ce parcours sans empêcher les invitations administratives |
 | `OTP_SECRET_KEY` | Secret aléatoire pour protéger les codes ; vide, utilise `SECRET_KEY`. Ne jamais placer cette valeur dans le frontend |

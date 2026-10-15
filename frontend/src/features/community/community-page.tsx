@@ -16,6 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useSession } from "@/components/app-shell";
+import { API_URL } from "@/lib/api";
 import {
   Badge,
   Button,
@@ -141,7 +142,7 @@ function PostCard({
     <article className="content-card">
       <div className="post-header">
         <span className="avatar">
-          {initials(String(item.author_name || t("Membre", "Member")))}
+          {typeof item.author_avatar_url === "string" ? <img src={`${API_URL}${item.author_avatar_url}`} alt="" crossOrigin="use-credentials" /> : initials(String(item.author_name || t("Membre", "Member")))}
         </span>
         <div style={{ flex: 1 }}>
           <strong>

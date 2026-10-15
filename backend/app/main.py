@@ -16,6 +16,52 @@ from app.db.session import SessionLocal
 logger = logging.getLogger(__name__)
 
 
+class RequestBodyTooLarge(Exception):
+    pass
+
+
+class RequestBodyLimitMiddleware:
+    """Reject oversized requests before file/form parsing can consume unbounded memory."""
+
+    def __init__(self, app, maximum_bytes: int):
+        self.app = app
+        self.maximum_bytes = maximum_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http':
+            await self.app(scope, receive, send)
+            return
+        headers = {key.lower(): value for key, value in scope.get('headers', [])}
+        content_length = headers.get(b'content-length')
+        if content_length:
+            try:
+                if int(content_length) > self.maximum_bytes:
+                    response = JSONResponse({'detail': 'La requête dépasse la taille maximale autorisée.'}, status_code=413)
+                    await response(scope, receive, send)
+                    return
+            except ValueError:
+                response = JSONResponse({'detail': 'En-tête Content-Length invalide.'}, status_code=400)
+                await response(scope, receive, send)
+                return
+
+        consumed = 0
+
+        async def limited_receive():
+            nonlocal consumed
+            message = await receive()
+            if message['type'] == 'http.request':
+                consumed += len(message.get('body', b''))
+                if consumed > self.maximum_bytes:
+                    raise RequestBodyTooLarge()
+            return message
+
+        try:
+            await self.app(scope, limited_receive, send)
+        except RequestBodyTooLarge:
+            response = JSONResponse({'detail': 'La requête dépasse la taille maximale autorisée.'}, status_code=413)
+            await response(scope, receive, send)
+
+
 @asynccontextmanager
 async def lifespan(app):
     settings.storage_path.mkdir(parents=True, exist_ok=True)
@@ -23,8 +69,9 @@ async def lifespan(app):
 
 
 app = FastAPI(title='CampusPulse API', version='1.0.0', description='Plateforme universitaire multi-établissements. Sessions par cookie et contrôle des permissions sur chaque ressource.', lifespan=lifespan, docs_url='/docs' if settings.app_env != 'production' else None, redoc_url=None)
+app.add_middleware(RequestBodyLimitMiddleware, maximum_bytes=settings.max_upload_size_mb * 1024 * 1024 + 1024 * 1024)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
-app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True, allow_methods=['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'], allow_headers=['Content-Type', 'X-CSRF-Token'], expose_headers=['Content-Disposition'])
+app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True, allow_methods=['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'], allow_headers=['Content-Type', 'X-CSRF-Token'], expose_headers=['Content-Disposition', 'Retry-After'])
 
 
 @app.middleware('http')
@@ -36,6 +83,8 @@ async def security_headers(request: Request, call_next):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    response.headers['Content-Security-Policy'] = "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
     if request.url.path.startswith('/api/'):
         response.headers['Cache-Control'] = 'no-store'
     if settings.app_env == 'production':

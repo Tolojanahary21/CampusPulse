@@ -9,6 +9,15 @@ if settings.database_url.startswith('sqlite'):
     engine_options['connect_args'] = {'check_same_thread': False}
     if ':memory:' in settings.database_url:
         engine_options['poolclass'] = StaticPool
+else:
+    # Bound connections per API/worker process so replica count cannot silently
+    # multiply SQLAlchemy's default overflow against a small database server.
+    engine_options.update(
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_max_overflow,
+        pool_timeout=settings.database_pool_timeout_seconds,
+        pool_recycle=1800,
+    )
 
 engine = create_engine(settings.database_url, **engine_options)
 if settings.database_url.startswith('sqlite'):

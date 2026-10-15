@@ -672,6 +672,13 @@ strong {
   font-weight: 700;
   font-size: 12px;
   flex-shrink: 0;
+  overflow: hidden;
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 .small-avatar {
   width: 33px;
@@ -730,6 +737,73 @@ strong {
   font-size: 10px;
   color: var(--muted);
   padding: 18px 36px;
+}
+.profile-photo-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 22px;
+}
+.profile-photo-controls .form-help,
+.profile-photo-controls .notice,
+.profile-photo-controls .success,
+.profile-photo-controls .error-notice {
+  flex-basis: 100%;
+  margin: 0;
+}
+.registration-links-panel .panel-header {
+  align-items: flex-start;
+}
+.registration-links-panel .panel-header p {
+  margin: 7px 0 0;
+  max-width: 680px;
+}
+.registration-role-links {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 24px;
+}
+.registration-role-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft, var(--surface));
+}
+.registration-role-link p {
+  margin: 5px 0 0;
+}
+.registration-link-result {
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.registration-link-result > strong {
+  display: block;
+  margin-bottom: 9px;
+}
+.registration-link-copy {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+.registration-link-copy input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .registration-link-copy {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .registration-role-link {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 .mobile-menu {
   display: none;

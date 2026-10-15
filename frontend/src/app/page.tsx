@@ -572,7 +572,7 @@ export default function Home() {
           </nav>
         </div>
         <div className="landing-footer-bottom">
-          <span>© {new Date().getFullYear()} CampusPulse</span>
+          <span>© {new Date().getFullYear()} Tolojanahary · CampusPulse. Tous droits réservés.</span>
           <span>
             {t("Photographies :", "Photography:")}{" "}
             <a

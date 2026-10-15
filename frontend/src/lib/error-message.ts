@@ -61,6 +61,30 @@ const messages: Record<string, string> = {
 
 export function errorMessage(error: unknown, locale: "fr" | "en") {
   const message = error instanceof Error ? error.message : String(error);
+  const status =
+    error && typeof error === "object" && "status" in error
+      ? Number(error.status)
+      : null;
+  const retryAfterSeconds =
+    error && typeof error === "object" && "retryAfterSeconds" in error
+      ? Number(error.retryAfterSeconds)
+      : 0;
+  if (
+    status === 429 &&
+    Number.isFinite(retryAfterSeconds) &&
+    retryAfterSeconds > 0 &&
+    message === "Trop de tentatives. Réessayez dans quelques minutes."
+  ) {
+    const minutes = Math.ceil(retryAfterSeconds / 60);
+    const wait = minutes < 60
+      ? locale === "fr" ? `${minutes} min` : `${minutes} minute${minutes === 1 ? "" : "s"}`
+      : locale === "fr"
+        ? `${Math.floor(minutes / 60)} h ${minutes % 60 ? `${minutes % 60} min` : ""}`.trim()
+        : `${Math.floor(minutes / 60)} hour${Math.floor(minutes / 60) === 1 ? "" : "s"}${minutes % 60 ? ` ${minutes % 60} min` : ""}`;
+    return locale === "fr"
+      ? `Trop de tentatives. Réessayez dans ${wait}.`
+      : `Too many attempts. Try again in ${wait}.`;
+  }
   if (locale === "fr") {
     return (
       Object.entries(messages).find(
@@ -71,10 +95,6 @@ export function errorMessage(error: unknown, locale: "fr" | "en") {
   if (messages[message]) return messages[message];
   // Server-owned messages have a French fallback. Keep them useful in English
   // without translating or altering any user-authored content returned by the API.
-  const status =
-    error && typeof error === "object" && "status" in error
-      ? Number(error.status)
-      : null;
   if (status !== null) {
     if (status === 401) return "Please sign in to continue.";
     if (status === 403)

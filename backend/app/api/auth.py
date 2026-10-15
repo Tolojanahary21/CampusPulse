@@ -1,8 +1,10 @@
 from datetime import timedelta
+from pathlib import Path
 from typing import Annotated, Literal
 
 from email_validator import EmailNotValidError, validate_email
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
@@ -12,9 +14,10 @@ from app.core.dependencies import get_current_user
 from app.core.rate_limit import check_rate_limit
 from app.core.security import as_utc, hash_password, hash_token, new_token, password_hasher, utcnow, verify_password
 from app.db.session import get_db
-from app.models import Campus, CampusMembership, NotificationPreference, PasswordResetToken, RoleAssignment, StudentRegistration, User, UserSession
+from app.models import Campus, CampusMembership, NotificationPreference, PasswordResetToken, RegistrationLink, RoleAssignment, StudentRegistration, User, UserSession
 from app.permissions import audit, is_platform_admin, require_role
-from app.services.mail import queue_email
+from app.services.mail import branded_email, queue_email
+from app.services.storage import save_avatar
 from app.services.registration import resend_verification, start_registration, verify_registration
 
 router = APIRouter(tags=['Authentification et comptes'])
@@ -59,6 +62,12 @@ class RegisterInput(EmailInput):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
     password: Password = Field(min_length=12, max_length=128)
+    invitation_token: str | None = Field(default=None, min_length=30, max_length=200)
+
+
+class RegistrationLinkInput(Input):
+    campus_id: str = Field(min_length=1, max_length=36)
+    role: Literal['STUDENT', 'CAMPUS_ADMIN', 'CONTENT_PUBLISHER', 'MODERATOR']
 
 
 class RegistrationChallengeInput(Input):
@@ -107,7 +116,7 @@ def profile(db: Session, user: User) -> dict:
 
 
 def clear_cookies(response: Response):
-    for name in (settings.session_cookie_name, 'campuspulse_csrf'):
+    for name in (settings.session_cookie_name, settings.csrf_cookie_name):
         response.delete_cookie(name, path='/', domain=settings.cookie_domain, secure=settings.cookie_secure, samesite='lax')
 
 
@@ -129,7 +138,16 @@ def issue_reset(db, user, invitation=False):
     text = f'Bonjour {user.first_name},\n\n'
     text += 'Votre établissement vous invite à rejoindre CampusPulse.\n' if invitation else 'Une demande de réinitialisation de votre mot de passe a été reçue.\n'
     text += f'\nChoisissez votre mot de passe :\n{link}\n\nCe lien est personnel, à usage unique et expire dans {int(ttl.total_seconds() / 60)} minutes.\nSi vous n’êtes pas à l’origine de cette demande, ignorez ce message.\n\nL’équipe CampusPulse'
-    queue_email(db, user.email, subject, text, expires_at=now + ttl)
+    title = 'Activez votre compte CampusPulse' if invitation else 'Réinitialisez votre mot de passe'
+    button = 'Choisir mon mot de passe' if invitation else 'Réinitialiser mon mot de passe'
+    queue_email(db, user.email, subject, text,
+                branded_email(title, 'Un lien sécurisé vous attend.', user.first_name,
+                              ['Ce lien est personnel et à usage unique.',
+                               f'Il expire dans {int(ttl.total_seconds() / 60)} minutes.'] if not invitation else
+                              ['Votre établissement vous invite à rejoindre CampusPulse.',
+                               f'Ce lien personnel expire dans {int(ttl.total_seconds() / 3600)} heures.'],
+                              button_text=button, button_url=link),
+                expires_at=now + ttl)
 
 
 @router.post('/auth/login')
@@ -154,7 +172,7 @@ def login(data: LoginInput, request: Request, response: Response, db: Session = 
     db.commit()
     options = {'max_age': settings.session_expire_hours * 3600, 'secure': settings.cookie_secure, 'samesite': 'lax', 'path': '/', 'domain': settings.cookie_domain}
     response.set_cookie(settings.session_cookie_name, token, httponly=True, **options)
-    response.set_cookie('campuspulse_csrf', csrf, httponly=False, **options)
+    response.set_cookie(settings.csrf_cookie_name, csrf, httponly=False, **options)
     return profile(db, user)
 
 
@@ -217,11 +235,43 @@ def registration_options(db: Session = Depends(get_db)):
     return {'enabled': True, 'campuses': [{'id': campus.id, 'name': campus.name, 'code': campus.code} for campus in campuses]}
 
 
+@router.get('/auth/registration-link/{token}')
+def registration_link_info(token: str, db: Session = Depends(get_db)):
+    link = db.scalar(select(RegistrationLink).where(RegistrationLink.token_hash == hash_token(token)))
+    if not link or link.consumed_at is not None or as_utc(link.expires_at) <= utcnow():
+        raise HTTPException(404, 'Ce lien d’inscription est invalide ou a expiré.')
+    campus = db.get(Campus, link.campus_id)
+    if not campus or campus.status != 'ACTIVE' or campus.deleted_at:
+        raise HTTPException(404, 'Cet établissement ne propose pas d’inscription actuellement.')
+    return {'campus_id': campus.id, 'campus_name': campus.name, 'role': link.role, 'expires_at': link.expires_at}
+
+
+@router.post('/platform/registration-links', status_code=201)
+def create_registration_link(data: RegistrationLinkInput, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not is_platform_admin(db, user):
+        raise HTTPException(403, 'Seule l’administration de plateforme peut créer ces liens.')
+    campus = db.scalar(select(Campus).where(Campus.id == data.campus_id, Campus.status == 'ACTIVE', Campus.deleted_at.is_(None)))
+    if not campus:
+        raise HTTPException(404, 'Établissement introuvable ou inactif.')
+    token = new_token()
+    expires_at = utcnow() + timedelta(days=30)
+    link = RegistrationLink(token_hash=hash_token(token), campus_id=campus.id, role=data.role,
+                            created_by_user_id=user.id, expires_at=expires_at)
+    db.add(link)
+    db.flush()
+    audit(db, user, 'REGISTRATION_LINK_CREATED', 'registration_link', link.id,
+          campus_id=campus.id, details={'role': data.role, 'expires_at': expires_at.isoformat()})
+    db.commit()
+    return {'token': token, 'campus_id': campus.id, 'campus_name': campus.name, 'role': data.role, 'expires_at': expires_at}
+
+
 @router.post('/auth/register', status_code=202)
 def register(data: RegisterInput, request: Request, db: Session = Depends(get_db)):
     if not settings.public_registration_enabled:
         raise HTTPException(403, 'Les inscriptions étudiantes sont temporairement fermées. Contactez votre établissement.')
-    check_rate_limit(db, 'register-ip', request.client.host if request.client else 'unknown', 5, 60)
+    # Local development and reverse-proxied deployments can share one client IP.
+    # Keep the per-email cap strict while allowing ordinary signup retries per IP.
+    check_rate_limit(db, 'register-ip', request.client.host if request.client else 'unknown', 20, 60)
     check_rate_limit(db, 'registration-mail-email', data.email, 5, 60)
     return start_registration(db, data)
 
@@ -253,6 +303,47 @@ def update_me(data: ProfileInput, user: User = Depends(get_current_user), db: Se
         setattr(user, key, value)
     db.commit()
     return profile(db, user)
+
+
+@router.post('/users/me/avatar')
+async def upload_my_avatar(file: UploadFile = File(...), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if is_platform_admin(db, user):
+        raise HTTPException(403, 'La photo de profil n’est pas disponible pour un administrateur de plateforme.')
+    old_key = user.avatar_url
+    user.avatar_url = await save_avatar(file)
+    db.commit()
+    if old_key:
+        old_path = Path(settings.storage_path) / old_key
+        if old_path.parent.resolve() == Path(settings.storage_path).resolve():
+            old_path.unlink(missing_ok=True)
+    return profile(db, user)
+
+
+@router.delete('/users/me/avatar', status_code=204)
+def delete_my_avatar(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if is_platform_admin(db, user):
+        raise HTTPException(403, 'La photo de profil n’est pas disponible pour un administrateur de plateforme.')
+    key = user.avatar_url
+    user.avatar_url = None
+    db.commit()
+    if key:
+        path = Path(settings.storage_path) / key
+        if path.parent.resolve() == Path(settings.storage_path).resolve():
+            path.unlink(missing_ok=True)
+
+
+@router.get('/users/me/avatar')
+def get_my_avatar(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if is_platform_admin(db, user):
+        raise HTTPException(404, 'Image introuvable.')
+    key = user.avatar_url
+    if not key or Path(key).name != key or not key.startswith('avatar-'):
+        raise HTTPException(404, 'Image introuvable.')
+    path = Path(settings.storage_path) / key
+    if not path.is_file():
+        raise HTTPException(404, 'Image introuvable.')
+    media_type = 'image/png' if path.suffix.lower() == '.png' else 'image/jpeg'
+    return FileResponse(path, media_type=media_type, headers={'Cache-Control': 'private, max-age=300'})
 
 
 @router.patch('/users/me/password')
@@ -327,7 +418,12 @@ def invite_user(campus_id: str, data: InvitationInput, user: User = Depends(get_
         issue_reset(db, target, invitation=True)
     else:
         campus = db.get(Campus, campus_id)
-        queue_email(db, target.email, 'Un nouvel établissement sur CampusPulse', f'Bonjour {target.first_name},\n\nVous avez rejoint {campus.name}. Retrouvez cet espace avec votre compte habituel :\n{settings.frontend_url}/login')
+        login_url = f'{settings.frontend_url}/login'
+        message = f'Vous avez rejoint {campus.name}. Retrouvez cet espace avec votre compte habituel.'
+        queue_email(db, target.email, 'Un nouvel établissement sur CampusPulse',
+                    f'Bonjour {target.first_name},\n\n{message}\n\n{login_url}',
+                    branded_email('Bienvenue dans un nouvel espace', 'Votre compte a rejoint un établissement.', target.first_name,
+                                  [message], button_text='Accéder à CampusPulse', button_url=login_url))
     audit(db, user, 'USER_INVITED', 'user', target.id, campus_id=campus_id, details={'role': data.role})
     db.commit()
     return campus_user_data(db, target, campus_id)

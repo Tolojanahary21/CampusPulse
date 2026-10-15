@@ -3,22 +3,20 @@ export const API_URL = (
 ).replace(/\/$/, "");
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  retryAfterSeconds?: number;
+  constructor(status: number, message: string, retryAfterSeconds?: number) {
     super(message);
     this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
     this.name = "ApiError";
   }
 }
 export function csrfToken(cookie: string) {
-  return (
-    cookie
-      .split(";")
-      .map((v) => v.trim())
-      .find((v) => v.startsWith("campuspulse_csrf="))
-      ?.split("=")
-      .slice(1)
-      .join("=") || ""
-  );
+  const cookies = cookie.split(";").map((value) => value.trim());
+  const csrfCookie =
+    cookies.find((value) => value.startsWith("__Host-campuspulse_csrf=")) ??
+    cookies.find((value) => value.startsWith("campuspulse_csrf="));
+  return csrfCookie?.slice(csrfCookie.indexOf("=") + 1) || "";
 }
 export async function api<T = Record<string, unknown>>(
   path: string,
@@ -66,7 +64,13 @@ export async function api<T = Record<string, unknown>>(
       !path.startsWith("/auth/")
     )
       window.dispatchEvent(new Event("session-expired"));
-    throw new ApiError(response.status, message);
+    const retryAfterHeader = response.headers.get("Retry-After");
+    const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : undefined;
+    throw new ApiError(
+      response.status,
+      message,
+      Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined,
+    );
   }
   if (response.status === 204) return undefined as T;
   return response.json();

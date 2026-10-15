@@ -1,6 +1,6 @@
 "use client";
 import { usePreferences } from "@/components/preferences";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Save, ShieldCheck } from "lucide-react";
@@ -18,15 +18,20 @@ import {
 } from "@/components/ui";
 import { useAction, useData } from "@/hooks/use-data";
 import { initials } from "@/lib/format";
+import { API_URL, api } from "@/lib/api";
 import type { Collection } from "@/types";
 export function ProfilePage() {
   const { t } = usePreferences();
   const { user } = useSession();
+  const isPlatform = user.roles.some((item) => item.role === "PLATFORM_ADMIN");
   const router = useRouter();
   const client = useQueryClient();
   const [saved, setSaved] = useState(false);
   const [page, setPage] = useState(1);
   const [passwordError, setPasswordError] = useState<unknown>();
+  const [photoError, setPhotoError] = useState<unknown>();
+  const [photoSaved, setPhotoSaved] = useState(false);
+  const photoInput = useRef<HTMLInputElement>(null);
   const history = useData<Collection>(
     `/students/${user.id}/enrollments?page=${page}&page_size=10`,
   );
@@ -59,7 +64,9 @@ export function ProfilePage() {
             <div className="panel-body">
               <div className="profile-identity">
                 <span className="avatar">
-                  {initials(user.first_name, user.last_name)}
+                  {!isPlatform && user.avatar_url ? (
+                    <img src={`${API_URL}/users/me/avatar?v=${encodeURIComponent(user.avatar_url)}`} alt="" crossOrigin="use-credentials" />
+                  ) : initials(user.first_name, user.last_name)}
                 </span>
                 <div>
                   <h2>
@@ -68,6 +75,41 @@ export function ProfilePage() {
                   <p className="muted small">{user.email}</p>
                 </div>
               </div>
+              {!isPlatform && (
+                <div className="profile-photo-controls">
+                  <ErrorNotice error={photoError} />
+                  {photoSaved && <Success>{t("Photo de profil mise à jour.", "Profile photo updated.")}</Success>}
+                  <input ref={photoInput} hidden type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={async (event) => {
+                    const file = event.currentTarget.files?.[0];
+                    if (!file) return;
+                    setPhotoError(undefined);
+                    setPhotoSaved(false);
+                    try {
+                      const form = new FormData();
+                      form.set("file", file);
+                      await api("/users/me/avatar", { method: "POST", body: form });
+                      await client.invalidateQueries({ queryKey: ["/auth/me"] });
+                      setPhotoSaved(true);
+                    } catch (err) {
+                      setPhotoError(err);
+                    } finally {
+                      if (photoInput.current) photoInput.current.value = "";
+                    }
+                  }} />
+                  <Button type="button" variant="secondary" onClick={() => photoInput.current?.click()}>
+                    {t(user.avatar_url ? "Changer ma photo" : "Ajouter une photo", user.avatar_url ? "Change my photo" : "Add a photo")}
+                  </Button>
+                  {user.avatar_url && <Button type="button" variant="ghost" onClick={async () => {
+                    setPhotoError(undefined);
+                    try {
+                      await api("/users/me/avatar", { method: "DELETE" });
+                      await client.invalidateQueries({ queryKey: ["/auth/me"] });
+                      setPhotoSaved(false);
+                    } catch (err) { setPhotoError(err); }
+                  }}>{t("Supprimer la photo", "Remove photo")}</Button>}
+                  <p className="form-help">{t("PNG ou JPEG, 5 Mo maximum.", "PNG or JPEG, up to 5 MB.")}</p>
+                </div>
+              )}
               <form
                 onSubmit={(e) => {
                   e.preventDefault();

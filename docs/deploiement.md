@@ -6,18 +6,18 @@ Le fichier `compose.yaml` livré est prévu pour le développement local. Il pub
 
 1. Créer une instance PostgreSQL 16 et un stockage privé persistant. Éviter de partager la base et les volumes avec le développement.
 2. Configurer les secrets backend et le compte SMTP dans le gestionnaire de secrets de l’hébergement, ou dans un fichier protégé non versionné.
-3. Définir `APP_ENV=production`, `APP_DEBUG=false`, `COOKIE_SECURE=true`, un `SECRET_KEY` aléatoire, l’URL PostgreSQL et l’URL HTTPS du frontend.
+3. Définir `APP_ENV=production`, `APP_DEBUG=false`, `COOKIE_SECURE=true`, `SESSION_COOKIE_NAME=__Host-campuspulse_session`, `CSRF_COOKIE_NAME=__Host-campuspulse_csrf`, laisser `COOKIE_DOMAIN` vide, créer un `SECRET_KEY` aléatoire, et renseigner l’URL PostgreSQL et l’URL HTTPS du frontend. La configuration refuse SQLite, les origines CORS non HTTPS, les hôtes locaux, les cookies non préfixés `__Host-` et les sessions de plus de 24 heures. Cette configuration exige que l’interface et l’API partagent le même nom d’hôte ; sinon, publier l’API sous le domaine de l’interface via le reverse proxy.
 4. Limiter `CORS_ORIGINS` aux origines publiques exactes et utiliser un reverse proxy HTTPS. Servir de préférence l’interface et `/api/v1` sous le même domaine. Acheminer aussi le contrôle de santé interne vers l’API.
 5. Construire le frontend avec l’URL publique de l’API. Les arguments de build et les variables runtime sont deux étapes distinctes.
 6. Configurer le relais SMTP TLS, l’expéditeur et le worker. Avec Compose, définir `COMPOSE_SMTP_HOST/PORT` dans le fichier racine, puis les identifiants et TLS dans `backend/.env` ; ces paramètres servent au backend et au worker. Retirer Mailpit des services exploités.
 
-Le proxy doit transférer le chemin `/api/v1` sans le supprimer, limiter la taille des requêtes selon `MAX_UPLOAD_SIZE_MB`, préserver l’en-tête Host et transmettre les informations HTTPS depuis une source de confiance. Le répertoire des fichiers privés ne doit jamais devenir une racine statique du proxy.
+Le proxy doit transférer le chemin `/api/v1` sans le supprimer, limiter la taille des requêtes selon `MAX_UPLOAD_SIZE_MB`, appliquer des délais de connexion/en-tête, préserver l’en-tête Host et transmettre les informations HTTPS depuis une source de confiance. L’API rejette aussi les corps au-delà de `MAX_UPLOAD_SIZE_MB + 1 Mio`, limite la concurrence Uvicorn à 100 requêtes par processus dans Compose et borne chaque pool SQLAlchemy à 5 connexions plus 5 débordements. Ajuster ces limites selon le budget mémoire/connexions du serveur avant d’augmenter le nombre de workers ou de réplicas. Le répertoire des fichiers privés ne doit jamais devenir une racine statique du proxy.
 
 ## Publier une version
 
 Effectuer une sauvegarde base et fichiers avant une mise à jour. Construire les deux images depuis un commit identifié, exécuter les tests puis appliquer `alembic upgrade head` avec un processus unique avant de relancer les instances API. Le démarrage Compose local le fait automatiquement ; un déploiement à plusieurs réplicas doit isoler cette étape.
 
-Lancer l’API avec `uvicorn app.main:app --host 0.0.0.0 --port 8000`, le worker avec `python -m app.mail_worker`, et le frontend avec la commande définie dans son Dockerfile. Aucun seed de démonstration ne doit être lancé sur une base réelle.
+Lancer l’API avec `uvicorn app.main:app --host 0.0.0.0 --port 8000 --limit-concurrency 100 --timeout-keep-alive 5 --limit-max-requests 10000 --no-server-header`, le worker avec `python -m app.mail_worker`, et le frontend avec la commande définie dans son Dockerfile. Tous les endpoints métier exigent une session ; les seules routes non authentifiées sont les parcours nécessaires de connexion, inscription/OTP, récupération de compte et informations publiques des liens d’inscription. Aucun seed de démonstration ne doit être lancé sur une base réelle.
 
 Créer le premier administrateur avec `python -m app.create_admin --email responsable@votre-domaine.example` depuis `backend/` ou dans le conteneur backend. Le mot de passe est demandé sans être affiché. Pour une initialisation automatisée, fournir `ADMIN_BOOTSTRAP_PASSWORD` par un secret d’environnement temporaire puis le retirer. Utiliser une adresse réelle de votre organisation ; les exemples `campuspulse.test` sont réservés aux démonstrations.
 

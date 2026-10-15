@@ -20,11 +20,11 @@ import {
   X,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, mutate } from "@/lib/api";
+import { API_URL, ApiError, mutate } from "@/lib/api";
 import { canRole, initials, label } from "@/lib/format";
 import { useData } from "@/hooks/use-data";
 import type { Campus, Collection, User } from "@/types";
-import { Button, ErrorNotice, Loading } from "./ui";
+import { Button, ErrorNotice, Loading, Modal } from "./ui";
 import { PreferenceControls, usePreferences } from "./preferences";
 interface Session {
   user: User;
@@ -91,6 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobile, setMobile] = useState(false);
   const [logoutError, setLogoutError] = useState<unknown>();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const activeNav = nav.find((n) => n.href === pathname);
@@ -247,7 +248,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             <Link href="/app/profile" className="sidebar-profile">
               <span className="avatar">
-                {initials(user.first_name, user.last_name)}
+                {!isPlatform && user.avatar_url ? <img src={`${API_URL}/users/me/avatar?v=${encodeURIComponent(user.avatar_url)}`} alt="" crossOrigin="use-credentials" /> : initials(user.first_name, user.last_name)}
               </span>
               <div>
                 <strong>
@@ -310,20 +311,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 className="avatar small-avatar"
                 aria-label={t("Mon profil", "My profile")}
               >
-                {initials(user.first_name, user.last_name)}
+                {!isPlatform && user.avatar_url ? <img src={`${API_URL}/users/me/avatar?v=${encodeURIComponent(user.avatar_url)}`} alt="" crossOrigin="use-credentials" /> : initials(user.first_name, user.last_name)}
               </Link>
               <button
                 className="icon-button"
-                onClick={logout}
+                onClick={() => { setLogoutError(undefined); setConfirmLogout(true); }}
                 disabled={loggingOut}
                 aria-label={t("Se déconnecter", "Sign out")}
+                title={t("Se déconnecter", "Sign out")}
               >
                 <LogOut size={18} />
               </button>
             </div>
           </header>
           <main id="main-content" className="page-content">
-            <ErrorNotice error={logoutError} />
             {children}
           </main>
           <footer className="workspace-footer">
@@ -334,9 +335,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 "Learn, share and move forward together.",
               )}
             </span>
+            <span>© {new Date().getFullYear()} Tolojanahary · Tous droits réservés.</span>
           </footer>
         </div>
       </div>
+      {confirmLogout && (
+        <Modal title={t("Confirmer la déconnexion", "Confirm sign out")} onClose={() => setConfirmLogout(false)}>
+          <p className="form-help">{t("Voulez-vous vraiment vous déconnecter de votre espace CampusPulse ?", "Are you sure you want to sign out of your CampusPulse workspace?")}</p>
+          <ErrorNotice error={logoutError} />
+          <div className="form-actions">
+            <Button type="button" variant="secondary" onClick={() => setConfirmLogout(false)} disabled={loggingOut}>{t("Annuler", "Cancel")}</Button>
+            <Button type="button" variant="danger" busy={loggingOut} onClick={() => void logout()}><LogOut size={16} />{t("Me déconnecter", "Sign out")}</Button>
+          </div>
+        </Modal>
+      )}
     </Context.Provider>
   );
 }

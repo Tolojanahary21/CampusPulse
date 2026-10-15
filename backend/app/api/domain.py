@@ -41,12 +41,19 @@ def commit(db):
 
 
 def pack(items, page=1, page_size=20):
-    items = list(items)
-    return {'items': items[(page - 1) * page_size:page * page_size], 'total': len(items), 'page': page, 'page_size': page_size}
+    start = (page - 1) * page_size
+    stop = start + page_size
+    selected = []
+    total = 0
+    for total, item in enumerate(items, start=1):
+        if start < total <= stop:
+            selected.append(item)
+    return {'items': selected, 'total': total, 'page': page, 'page_size': page_size}
 
 
 def rows(db, model):
-    return list(db.scalars(select(model).order_by(model.created_at.desc())))
+    # Stream large tables rather than materializing every ORM row at once.
+    return db.scalars(select(model).order_by(model.created_at.desc()).execution_options(yield_per=250))
 
 
 def changed(obj, payload, schema):
@@ -107,13 +114,13 @@ def enrich_enrollment(db, item):
 @router.get('/campuses')
 def my_campuses(db: DB, user: Actor, page: Page = 1, page_size: PageSize = 20) -> CollectionOutput[CampusOutput]:
     allowed = accessible_campus_ids(db, user)
-    return pack([serialize(c) for c in rows(db, Campus) if c.id in allowed], page, page_size)
+    return pack((serialize(c) for c in rows(db, Campus) if c.id in allowed), page, page_size)
 
 
 @router.get('/platform/campuses')
 def platform_campuses(db: DB, user: Actor, q: str = '', page: Page = 1, page_size: PageSize = 20) -> CollectionOutput[CampusOutput]:
     platform(db, user)
-    return pack([serialize(c) for c in rows(db, Campus) if q.casefold() in f'{c.name} {c.code}'.casefold()], page, page_size)
+    return pack((serialize(c) for c in rows(db, Campus) if q.casefold() in f'{c.name} {c.code}'.casefold()), page, page_size)
 
 
 @router.post('/platform/campuses', status_code=201)
@@ -158,7 +165,7 @@ def grant_role(campus_id: str, payload: RoleInput, db: DB, user: Actor) -> RoleA
 @router.get('/campuses/{campus_id}/roles')
 def list_roles(campus_id: str, db: DB, user: Actor, page: Page = 1, page_size: PageSize = 20) -> CollectionOutput[RoleAssignmentOutput]:
     require_role(db, user, campus_id, 'CAMPUS_ADMIN')
-    return pack([serialize(r) for r in rows(db, RoleAssignment) if r.campus_id == campus_id and r.revoked_at is None], page, page_size)
+    return pack((serialize(r) for r in rows(db, RoleAssignment) if r.campus_id == campus_id and r.revoked_at is None), page, page_size)
 
 
 @router.delete('/roles/{role_id}', status_code=204)
@@ -175,7 +182,8 @@ def revoke_role(role_id: str, db: DB, user: Actor):
 @router.get('/platform/users')
 def platform_users(db: DB, user: Actor, q: str = '', page: Page = 1, page_size: PageSize = 20) -> CollectionOutput[UserOutput]:
     platform(db, user)
-    return pack([serialize(u) for u in rows(db, User) if q.casefold() in f'{u.first_name} {u.last_name} {u.email}'.casefold()], page, page_size)
+    needle = q.casefold()
+    return pack((serialize(u) for u in rows(db, User) if needle in f'{u.first_name} {u.last_name} {u.email}'.casefold()), page, page_size)
 
 
 @router.patch('/platform/users/{user_id}/status')
@@ -197,7 +205,7 @@ def audit_logs(db: DB, user: Actor, campus_id: str | None = None, page: Page = 1
         require_role(db, user, campus_id, 'CAMPUS_ADMIN')
     else:
         platform(db, user)
-    return pack([serialize(a) for a in rows(db, AuditLog) if not campus_id or a.campus_id == campus_id], page, page_size)
+    return pack((serialize(a) for a in rows(db, AuditLog) if not campus_id or a.campus_id == campus_id), page, page_size)
 
 
 @router.get('/platform/settings')
@@ -237,7 +245,7 @@ def update_campus_settings(campus_id: str, payload: CampusSettingsInput, db: DB,
 @router.get('/campuses/{campus_id}/academic-years')
 def list_years(campus_id: str, db: DB, user: Actor, page: Page = 1, page_size: PageSize = 20) -> CollectionOutput[AcademicYearOutput]:
     require_campus(db, user, campus_id)
-    return pack([serialize(y) for y in rows(db, AcademicYear) if y.campus_id == campus_id], page, page_size)
+    return pack((serialize(y) for y in rows(db, AcademicYear) if y.campus_id == campus_id), page, page_size)
 
 
 @router.post('/campuses/{campus_id}/academic-years', status_code=201)
@@ -266,7 +274,7 @@ def update_year(year_id: str, payload: AcademicYearPatch, db: DB, user: Actor) -
 @router.get('/campuses/{campus_id}/programs')
 def list_programs(campus_id: str, db: DB, user: Actor, page: Page = 1, page_size: PageSize = 20) -> CollectionOutput[ProgramOutput]:
     require_campus(db, user, campus_id)
-    return pack([serialize(p) for p in rows(db, Program) if p.campus_id == campus_id], page, page_size)
+    return pack((serialize(p) for p in rows(db, Program) if p.campus_id == campus_id), page, page_size)
 
 
 @router.post('/campuses/{campus_id}/programs', status_code=201)
@@ -296,7 +304,8 @@ def archive_program(program_id: str, db: DB, user: Actor):
 def list_levels(program_id: str, db: DB, user: Actor, page: Page = 1, page_size: PageSize = 20) -> CollectionOutput[ProgramLevelOutput]:
     program = get(db, Program, program_id)
     require_campus(db, user, program.campus_id)
-    return pack([serialize(l) for l in sorted(rows(db, ProgramLevel), key=lambda x: x.level_order) if l.program_id == program_id], page, page_size)
+    levels = db.scalars(select(ProgramLevel).order_by(ProgramLevel.level_order, ProgramLevel.id).execution_options(yield_per=250))
+    return pack((serialize(level) for level in levels if level.program_id == program_id), page, page_size)
 
 
 @router.post('/programs/{program_id}/levels', status_code=201)
@@ -328,7 +337,7 @@ def archive_level(level_id: str, db: DB, user: Actor):
 @router.get('/levels/{level_id}/subjects')
 def list_subjects(level_id: str, db: DB, user: Actor, page: Page = 1, page_size: PageSize = 20) -> CollectionOutput[SubjectOutput]:
     require_campus(db, user, level_campus(db, get(db, ProgramLevel, level_id)))
-    return pack([serialize(s) for s in rows(db, Subject) if s.program_level_id == level_id], page, page_size)
+    return pack((serialize(s) for s in rows(db, Subject) if s.program_level_id == level_id), page, page_size)
 
 
 @router.post('/levels/{level_id}/subjects', status_code=201)
@@ -360,8 +369,9 @@ def archive_subject(subject_id: str, db: DB, user: Actor):
 @router.get('/campuses/{campus_id}/enrollments')
 def list_enrollments(campus_id: str, db: DB, user: Actor, q: str = '', page: Page = 1, page_size: PageSize = 20) -> CollectionOutput[EnrollmentOutput]:
     require_role(db, user, campus_id, 'CAMPUS_ADMIN')
-    items = [enrich_enrollment(db, e) for e in rows(db, Enrollment) if e.campus_id == campus_id]
-    return pack([e for e in items if q.casefold() in f"{e['student_name']} {e['enrollment_number']} {e['student_email']}".casefold()], page, page_size)
+    needle = q.casefold()
+    items = (enrich_enrollment(db, e) for e in rows(db, Enrollment) if e.campus_id == campus_id)
+    return pack((e for e in items if needle in f"{e['student_name']} {e['enrollment_number']} {e['student_email']}".casefold()), page, page_size)
 
 
 @router.post('/campuses/{campus_id}/enrollments', status_code=201)
@@ -403,7 +413,7 @@ def update_enrollment(enrollment_id: str, payload: EnrollmentPatch, db: DB, user
 def student_history(student_id: str, db: DB, user: Actor, page: Page = 1, page_size: PageSize = 20) -> CollectionOutput[EnrollmentOutput]:
     if student_id != user.id and not (is_platform_admin(db, user) or any(has_role(db, user, c, 'CAMPUS_ADMIN') for c in accessible_campus_ids(db, user))):
         raise HTTPException(403, 'Accès refusé.')
-    items = [enrich_enrollment(db, e) for e in rows(db, Enrollment) if e.user_id == student_id and (student_id == user.id or has_role(db, user, e.campus_id, 'CAMPUS_ADMIN'))]
+    items = (enrich_enrollment(db, e) for e in rows(db, Enrollment) if e.user_id == student_id and (student_id == user.id or has_role(db, user, e.campus_id, 'CAMPUS_ADMIN')))
     return pack(items, page, page_size)
 
 
@@ -478,7 +488,6 @@ def content_transition(model, content_id, status, db, user):
 def content_list(db, user, model, page, page_size, campus_id, q, manage, status, scope, program_id, level_id, year_id, category=None, subject_id=None):
     if campus_id:
         require_campus(db, user, campus_id)
-    items = []
     candidates = select(model).where(or_(model.campus_id.in_(accessible_campus_ids(db, user)), model.scope == 'PLATFORM'))
     if campus_id:
         candidates = candidates.where(or_(model.campus_id == campus_id, model.scope == 'PLATFORM'))
@@ -488,31 +497,37 @@ def content_list(db, user, model, page, page_size, campus_id, q, manage, status,
         candidates = candidates.where(model.status == status)
     if scope:
         candidates = candidates.where(model.scope == scope)
-    for obj in db.scalars(candidates.order_by(model.created_at.desc())):
-        if campus_id and obj.campus_id not in (campus_id, None):
-            continue
-        if manage and not can_manage_content(db, user, obj):
-            continue
-        if not can_view_content(db, user, obj, management=manage):
-            continue
-        if status and obj.status != status or scope and obj.scope != scope:
-            continue
-        if program_id and program_id not in obj.program_ids or level_id and level_id not in obj.level_ids or year_id and year_id not in obj.year_ids:
-            continue
-        if category and obj.category != category or subject_id and obj.subject_id != subject_id:
-            continue
-        if q.casefold() not in f'{obj.title} {getattr(obj, "summary", "") or ""} {getattr(obj, "description", "") or ""}'.casefold():
-            continue
-        data = serialize(obj)
-        if model is Announcement:
-            data['campus_name'] = get(db, Campus, obj.campus_id).name if obj.campus_id else 'Tous les établissements'
-        if model is Document:
-            asset = get(db, FileAsset, obj.file_asset_id)
-            data.update(original_filename=asset.original_filename, mime_type=asset.mime_type, size_bytes=asset.size_bytes)
-        items.append(data)
+    ordering = [model.created_at.desc(), model.id]
     if model is Announcement:
-        items.sort(key=lambda a: not a['is_pinned'])
-    return pack(items, page, page_size)
+        ordering = [model.is_pinned.desc(), model.created_at.desc(), model.id]
+    needle = q.casefold()
+
+    def visible_items():
+        candidates_result = db.scalars(candidates.order_by(*ordering).execution_options(yield_per=250))
+        for obj in candidates_result:
+            if campus_id and obj.campus_id not in (campus_id, None):
+                continue
+            if manage and not can_manage_content(db, user, obj):
+                continue
+            if not can_view_content(db, user, obj, management=manage):
+                continue
+            if status and obj.status != status or scope and obj.scope != scope:
+                continue
+            if program_id and program_id not in obj.program_ids or level_id and level_id not in obj.level_ids or year_id and year_id not in obj.year_ids:
+                continue
+            if category and obj.category != category or subject_id and obj.subject_id != subject_id:
+                continue
+            if needle not in f'{obj.title} {getattr(obj, "summary", "") or ""} {getattr(obj, "description", "") or ""}'.casefold():
+                continue
+            data = serialize(obj)
+            if model is Announcement:
+                data['campus_name'] = get(db, Campus, obj.campus_id).name if obj.campus_id else 'Tous les établissements'
+            if model is Document:
+                asset = get(db, FileAsset, obj.file_asset_id)
+                data.update(original_filename=asset.original_filename, mime_type=asset.mime_type, size_bytes=asset.size_bytes)
+            yield data
+
+    return pack(visible_items(), page, page_size)
 
 
 @router.get('/announcements')
@@ -554,6 +569,14 @@ def enriched_comment(db, comment):
     result = serialize(comment)
     author = get(db, User, comment.author_user_id)
     result['author_name'] = f'{author.first_name} {author.last_name}'
+    if isinstance(comment, CommunityComment):
+        parent = db.get(CommunityPost, comment.post_id)
+        campus_id = parent.campus_id if parent else None
+    else:
+        parent = db.get(Announcement, comment.announcement_id)
+        campus_id = parent.campus_id if parent else None
+    if campus_id and author.avatar_url and not is_platform_admin(db, author):
+        result['author_avatar_url'] = f'/campuses/{campus_id}/users/{author.id}/avatar'
     return result
 
 
@@ -562,7 +585,7 @@ def announcement_comments(announcement_id: str, db: DB, user: Actor, page: Page 
     obj = get(db, Announcement, announcement_id)
     if not can_view_content(db, user, obj):
         raise HTTPException(404, 'Annonce introuvable.')
-    return pack([enriched_comment(db, c) for c in rows(db, AnnouncementComment) if c.announcement_id == obj.id and c.status == 'VISIBLE'], page, page_size)
+    return pack((enriched_comment(db, c) for c in rows(db, AnnouncementComment) if c.announcement_id == obj.id and c.status == 'VISIBLE'), page, page_size)
 
 
 @router.post('/announcements/{announcement_id}/comments', status_code=201)
@@ -673,9 +696,11 @@ def list_events(db: DB, user: Actor, campus_id: str | None = None, manage: bool 
                 q: str = '', page: Page = 1, page_size: PageSize = 20) -> CollectionOutput[EventOutput]:
     if campus_id:
         require_campus(db, user, campus_id)
-    return pack([serialize(e) for e in sorted(rows(db, Event), key=lambda e: e.starts_at)
+    events = db.scalars(select(Event).order_by(Event.starts_at, Event.id).execution_options(yield_per=250))
+    needle = q.casefold()
+    return pack((serialize(e) for e in events
                  if (not campus_id or e.campus_id in (campus_id, None)) and (not manage or has_role(db, user, e.campus_id, 'CAMPUS_ADMIN', 'CONTENT_PUBLISHER'))
-                 and event_visible(db, user, e, manage) and q.casefold() in e.title.casefold()], page, page_size)
+                 and event_visible(db, user, e, manage) and needle in e.title.casefold()), page, page_size)
 
 
 @router.post('/events', status_code=201)
@@ -719,10 +744,33 @@ def enriched_post(db, user, obj):
     result = serialize(obj)
     author = get(db, User, obj.author_user_id)
     result['author_name'] = f'{author.first_name} {author.last_name}'
+    if author.avatar_url and not is_platform_admin(db, author):
+        result['author_avatar_url'] = f'/campuses/{obj.campus_id}/users/{author.id}/avatar'
     result['comment_count'] = db.scalar(select(func.count()).select_from(CommunityComment).where(CommunityComment.post_id == obj.id, CommunityComment.status == 'VISIBLE'))
     result['reaction_count'] = db.scalar(select(func.count()).select_from(Reaction).where(Reaction.post_id == obj.id))
     result['my_reaction_id'] = db.scalar(select(Reaction.id).where(Reaction.post_id == obj.id, Reaction.user_id == user.id))
     return result
+
+
+@router.get('/campuses/{campus_id}/users/{target_user_id}/avatar')
+def campus_member_avatar(campus_id: str, target_user_id: str, db: DB, user: Actor):
+    require_campus(db, user, campus_id)
+    target = db.get(User, target_user_id)
+    member = db.scalar(select(CampusMembership.id).where(
+        CampusMembership.user_id == target_user_id,
+        CampusMembership.campus_id == campus_id,
+        CampusMembership.status == 'ACTIVE',
+    ))
+    if not target or not member or not target.avatar_url or is_platform_admin(db, target):
+        raise HTTPException(404, 'Image introuvable.')
+    key = target.avatar_url
+    if key != key.rsplit('/', 1)[-1] or not key.startswith('avatar-'):
+        raise HTTPException(404, 'Image introuvable.')
+    path = file_path(key)
+    if not path.is_file():
+        raise HTTPException(404, 'Image introuvable.')
+    return FileResponse(path, media_type='image/png' if path.suffix.lower() == '.png' else 'image/jpeg',
+                        headers={'Cache-Control': 'private, max-age=300'})
 
 
 def community_allowed(db, user, campus_id, permission):
@@ -736,9 +784,9 @@ def list_posts(db: DB, user: Actor, campus_id: str | None = None, q: str = '', p
     if campus_id:
         require_campus(db, user, campus_id)
     candidates = select(CommunityPost).where(CommunityPost.campus_id.in_([campus_id] if campus_id else accessible_campus_ids(db, user)))
-    return pack([enriched_post(db, user, p) for p in db.scalars(candidates.order_by(CommunityPost.created_at.desc()))
+    return pack((enriched_post(db, user, p) for p in db.scalars(candidates.order_by(CommunityPost.created_at.desc()).execution_options(yield_per=250))
                  if (not campus_id or p.campus_id == campus_id) and post_visible(db, user, p)
-                 and q.casefold() in f'{p.title or ""} {p.content}'.casefold()], page, page_size)
+                 and q.casefold() in f'{p.title or ""} {p.content}'.casefold()), page, page_size)
 
 
 @router.post('/community/posts', status_code=201)
@@ -785,8 +833,9 @@ def delete_post(post_id: str, db: DB, user: Actor):
 def post_comments(post_id: str, db: DB, user: Actor, page: Page = 1, page_size: PageSize = 20) -> CollectionOutput[CommunityCommentOutput]:
     obj = accessible_post(db, user, post_id)
     moderation = has_role(db, user, obj.campus_id, 'CAMPUS_ADMIN', 'MODERATOR')
-    return pack([enriched_comment(db, c) for c in reversed(rows(db, CommunityComment)) if c.post_id == obj.id
-                 and (c.status == 'VISIBLE' or c.status != 'DELETED' and (c.author_user_id == user.id or moderation))], page, page_size)
+    comments = db.scalars(select(CommunityComment).order_by(CommunityComment.created_at, CommunityComment.id).execution_options(yield_per=250))
+    return pack((enriched_comment(db, c) for c in comments if c.post_id == obj.id
+                 and (c.status == 'VISIBLE' or c.status != 'DELETED' and (c.author_user_id == user.id or moderation))), page, page_size)
 
 
 @router.post('/community/posts/{post_id}/comments', status_code=201)
@@ -810,9 +859,12 @@ def create_post_comment(post_id: str, payload: CommentInput, db: DB, user: Actor
                                 message=f'{user.first_name} a commenté votre publication.', link=f'/app/community/{obj.id}'))
             preference = db.scalar(select(NotificationPreference).where(NotificationPreference.user_id == author.id))
             if preference and preference.email_community:
-                from app.services.mail import queue_email
+                from app.services.mail import branded_email, queue_email
+                url = f'{settings.frontend_url.rstrip("/")}/app/community/{obj.id}'
                 queue_email(db, author.email, 'CampusPulse — Une nouvelle réponse',
-                            f'Votre publication a reçu un commentaire. Consultez votre espace : {settings.frontend_url.rstrip("/")}/app/community/{obj.id}')
+                            f'{user.first_name} a répondu à votre publication. Consultez votre espace : {url}',
+                            branded_email('Une réponse à votre publication', 'Une personne a réagi à votre échange.', author.first_name,
+                                          [f'{user.first_name} a commenté votre publication.'], button_text='Voir la conversation', button_url=url))
     commit(db)
     return enriched_comment(db, comment)
 
@@ -976,7 +1028,7 @@ def notifications(db: DB, user: Actor, unread: bool = False, page: Page = 1, pag
     candidates = select(Notification).where(Notification.user_id == user.id).order_by(Notification.created_at.desc())
     if unread:
         candidates = candidates.where(Notification.read_at.is_(None))
-    return pack([serialize(n) for n in db.scalars(candidates) if notification_visible(db, user, n)], page, page_size)
+    return pack((serialize(n) for n in db.scalars(candidates.execution_options(yield_per=250)) if notification_visible(db, user, n)), page, page_size)
 
 
 @router.patch('/notifications/{notification_id}/read')
@@ -1004,11 +1056,12 @@ def dashboard_summary(db: DB, user: Actor, campus_id: str | None = None) -> Dash
     allowed = [campus_id] if campus_id else accessible_campus_ids(db, user)
     managed = [c for c in allowed if has_role(db, user, c, 'CAMPUS_ADMIN')]
     moderated = [c for c in allowed if has_role(db, user, c, 'CAMPUS_ADMIN', 'MODERATOR')]
-    announcements = [a for a in rows(db, Announcement) if a.campus_id in [*allowed, None] and can_view_content(db, user, a)]
-    documents = [d for d in rows(db, Document) if d.campus_id in [*allowed, None] and can_view_content(db, user, d)]
-    students = set(db.scalars(select(CampusMembership.user_id).where(CampusMembership.campus_id.in_(managed),
-                        CampusMembership.status == 'ACTIVE', CampusMembership.membership_type == 'STUDENT')))
-    return {'campuses': len(allowed), 'students': len(students), 'announcements': len(announcements), 'documents': len(documents),
+    students = db.scalar(select(func.count(func.distinct(CampusMembership.user_id))).where(
+        CampusMembership.campus_id.in_(managed), CampusMembership.status == 'ACTIVE',
+        CampusMembership.membership_type == 'STUDENT')) or 0
+    announcement_count = sum(1 for a in rows(db, Announcement) if a.campus_id in [*allowed, None] and can_view_content(db, user, a))
+    document_count = sum(1 for d in rows(db, Document) if d.campus_id in [*allowed, None] and can_view_content(db, user, d))
+    return {'campuses': len(allowed), 'students': students, 'announcements': announcement_count, 'documents': document_count,
             'events': sum(e.campus_id in [*allowed, None] and event_visible(db, user, e) for e in rows(db, Event)),
             'posts': sum(p.campus_id in allowed and post_visible(db, user, p) for p in rows(db, CommunityPost)),
             'unread_notifications': sum(notification_visible(db, user, n) and n.campus_id in [*allowed, None] for n in db.scalars(select(Notification).where(Notification.user_id == user.id, Notification.read_at.is_(None)))),

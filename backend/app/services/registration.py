@@ -10,10 +10,10 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
-from app.core.security import as_utc, hash_password, utcnow
-from app.models import Campus, CampusMembership, RoleAssignment, StudentRegistration, User
+from app.core.security import as_utc, hash_password, hash_token, utcnow
+from app.models import Campus, CampusMembership, RegistrationLink, RoleAssignment, StudentRegistration, User
 from app.permissions import audit
-from app.services.mail import MailOutbox, queue_email
+from app.services.mail import MailOutbox, branded_email, queue_email
 
 CLOSED = 'Les inscriptions étudiantes sont temporairement fermées. Contactez votre établissement.'
 CAMPUS_UNAVAILABLE = 'Cet établissement ne propose pas d’inscription actuellement.'
@@ -121,14 +121,23 @@ def _queue_code(db, registration, now):
     registration.expires_at = now + timedelta(minutes=settings.otp_ttl_minutes)
     registration.resend_available_at = now + timedelta(seconds=settings.otp_resend_cooldown_seconds)
     registration.attempts = 0
-    registration.mail_id = queue_email(
-        db, registration.email, 'Votre code de vérification CampusPulse',
+    subject = 'Votre code de vérification CampusPulse'
+    text_body = (
         f'Bonjour {registration.first_name},\n\n'
-        'Pour confirmer votre adresse e-mail et créer votre compte étudiant CampusPulse :\n\n'
+        'Pour confirmer votre adresse e-mail et créer votre compte CampusPulse :\n\n'
         f'Code : {code}\n\n'
         f'Ce code est personnel, à usage unique et expire dans {settings.otp_ttl_minutes} minutes. '
         'Saisissez-le dans la page d’inscription. Ne partagez pas ce code.\n'
-        'Si vous n’êtes pas à l’origine de cette inscription, ignorez ce message.\n\nL’équipe CampusPulse',
+        'Si vous n’êtes pas à l’origine de cette inscription, ignorez ce message.\n\nL’équipe CampusPulse'
+    )
+    html_body = branded_email(
+        'Confirmez votre adresse e-mail', 'Votre code CampusPulse est prêt.', registration.first_name,
+        [f'Utilisez ce code à usage unique pour confirmer votre adresse e-mail. Il expire dans {settings.otp_ttl_minutes} minutes.',
+         'Saisissez-le dans la page d’inscription. Ne le partagez avec personne.'],
+        verification_code=code,
+    )
+    registration.mail_id = queue_email(
+        db, registration.email, subject, text_body, html_body,
         expires_at=registration.expires_at,
     )
 
@@ -137,6 +146,18 @@ def start_registration(db, data):
     # Hash before acquiring locks; never store or mail the submitted password.
     password_hash = hash_password(data.password)
     try:
+        role = 'STUDENT'
+        link_id = None
+        if data.invitation_token:
+            invitation = db.scalar(select(RegistrationLink).where(
+                RegistrationLink.token_hash == hash_token(data.invitation_token),
+            ).with_for_update())
+            if invitation is None or invitation.consumed_at is not None or as_utc(invitation.expires_at) <= utcnow():
+                raise HTTPException(400, 'Ce lien d’inscription est invalide ou a expiré. Demandez un nouveau lien.')
+            role = invitation.role
+            link_id = invitation.id
+            if data.campus_id != invitation.campus_id:
+                raise HTTPException(422, 'Cet établissement ne correspond pas au lien reçu.')
         campus = _active_campus(db, data.campus_id)
         if db.scalar(select(User.id).where(User.email == data.email)):
             raise HTTPException(409, EMAIL_USED)
@@ -149,6 +170,7 @@ def start_registration(db, data):
         registration = StudentRegistration(
             email=data.email, campus_id=campus.id, first_name=data.first_name, last_name=data.last_name,
             password_hash=password_hash, code_hash='', expires_at=now, resend_available_at=now,
+            role=role, registration_link_id=link_id,
         )
         db.add(registration)
         db.flush()
@@ -204,6 +226,23 @@ def verify_registration(db, challenge_id, code):
         raise HTTPException(429 if locked else 400, TOO_MANY_ATTEMPTS if locked else CODE_INVALID)
     email = registration.email
     try:
+        if registration.registration_link_id:
+            link = db.scalar(select(RegistrationLink).where(
+                RegistrationLink.id == registration.registration_link_id,
+            ).with_for_update())
+            if link is None or link.role != registration.role or link.campus_id != registration.campus_id or link.consumed_at is not None or as_utc(link.expires_at) <= now:
+                _discard(db, registration)
+                db.commit()
+                raise HTTPException(400, 'Ce lien d’inscription a déjà été utilisé ou a expiré.')
+            consumed = db.execute(update(RegistrationLink).where(
+                RegistrationLink.id == link.id,
+                RegistrationLink.consumed_at.is_(None),
+                RegistrationLink.expires_at > now,
+            ).values(consumed_at=now).execution_options(synchronize_session=False))
+            if consumed.rowcount != 1:
+                _discard(db, registration)
+                db.commit()
+                raise HTTPException(400, 'Ce lien d’inscription a déjà été utilisé ou a expiré.')
         if db.scalar(select(User.id).where(User.email == email)):
             _discard(db, registration)
             db.commit()
@@ -214,12 +253,17 @@ def verify_registration(db, challenge_id, code):
         )
         db.add(user)
         db.flush()
-        db.add(CampusMembership(user_id=user.id, campus_id=campus.id, membership_type='STUDENT', status='ACTIVE'))
-        db.add(RoleAssignment(user_id=user.id, campus_id=campus.id, role='STUDENT'))
+        db.add(CampusMembership(user_id=user.id, campus_id=campus.id, membership_type='STUDENT' if registration.role == 'STUDENT' else 'STAFF', status='ACTIVE'))
+        db.add(RoleAssignment(user_id=user.id, campus_id=campus.id, role=registration.role))
+        role_label = {'STUDENT': 'étudiant', 'CAMPUS_ADMIN': 'administrateur d’établissement', 'CONTENT_PUBLISHER': 'responsable de publication', 'MODERATOR': 'modérateur'}.get(registration.role, 'membre')
+        welcome = f'Votre adresse e-mail est vérifiée. Votre compte {role_label} est activé pour {campus.name}.'
+        login_url = f'{settings.frontend_url}/login'
         queue_email(db, user.email, 'Bienvenue sur CampusPulse',
-                    f'Bonjour {user.first_name},\n\nVotre adresse e-mail est vérifiée. Votre compte étudiant a été créé pour {campus.name}.\n'
-                    f'Vous pouvez vous connecter :\n{settings.frontend_url}/login\n\nL’équipe CampusPulse')
-        audit(db, user, 'STUDENT_REGISTERED', 'user', user.id, campus_id=campus.id, details={'email_verified': True})
+                    f'Bonjour {user.first_name},\n\n{welcome}\n\nConnectez-vous : {login_url}\n\nL’équipe CampusPulse',
+                    branded_email('Bienvenue sur CampusPulse', 'Votre adresse e-mail est confirmée.', user.first_name,
+                                  [welcome], button_text='Se connecter', button_url=login_url))
+        audit(db, user, 'STUDENT_REGISTERED' if registration.role == 'STUDENT' else 'ROLE_REGISTERED',
+              'user', user.id, campus_id=campus.id, details={'email_verified': True, 'role': registration.role})
         _discard(db, registration)
         db.commit()
     except IntegrityError as exc:

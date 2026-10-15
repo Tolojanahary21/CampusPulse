@@ -88,7 +88,7 @@ def can_view_content(db, user, obj, *, management=False):
 
 
 def serialize(obj):
-    forbidden = {'password_hash', 'storage_key', 'token_hash', 'csrf_token'}
+    forbidden = {'password_hash', 'storage_key', 'token_hash', 'csrf_token', 'code_hash'}
     result = {c.key: getattr(obj, c.key) for c in inspect(obj).mapper.column_attrs if c.key not in forbidden}
     if isinstance(obj, (Announcement, Document)):
         result.update(program_ids=list(obj.program_ids), level_ids=list(obj.level_ids), year_ids=list(obj.year_ids))

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import { useAction, useData } from "@/hooks/use-data";
 import { date, initials } from "@/lib/format";
+import { API_URL } from "@/lib/api";
 import type { Collection, RecordItem } from "@/types";
 import { ReportDialog } from "./report";
 export function Comments({
@@ -61,7 +62,7 @@ export function Comments({
           data.items.map((item) => (
             <div className="comment" key={item.id}>
               <span className="avatar">
-                {initials(String(item.author_name || t("Membre", "Member")))}
+                {typeof item.author_avatar_url === "string" ? <img src={`${API_URL}${item.author_avatar_url}`} alt="" crossOrigin="use-credentials" /> : initials(String(item.author_name || t("Membre", "Member")))}
               </span>
               <div style={{ flex: 1 }}>
                 <div className="comment-meta">

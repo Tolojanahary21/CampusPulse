@@ -21,7 +21,7 @@ import { date, label, params } from "@/lib/format";
 import type { Collection, RecordItem } from "@/types";
 import { ResourceManager } from "./resource-manager";
 import { Settings } from "./settings";
-import { CampusUsers } from "./campus-users";
+import { RegistrationLinks } from "./registration-links";
 function RolesDialog({
   campus,
   onClose,
@@ -47,8 +47,8 @@ function RolesDialog({
       <ErrorNotice error={roles.error || users.error || action.error} />
       <p className="form-help">
         {t(
-          "Attribuez un rôle à un compte existant. Pour créer un compte, utilisez l’onglet Invitations après avoir choisi cet établissement dans le menu latéral.",
-          "Assign a role to an existing account. To create an account, select this campus in the sidebar and open the Invitations tab.",
+        "Attribuez un rôle à un compte existant ou créez un lien d’inscription à partager.",
+        "Assign a role to an existing account or create a shareable registration link.",
         )}
       </p>
       {roles.data?.items.map((role) => (
@@ -493,13 +493,13 @@ export function PlatformPage() {
       {tab === "users" && <PlatformUsers />}{" "}
       {tab === "invitations" &&
         (campusId ? (
-          <CampusUsers key={campusId} />
+          <RegistrationLinks key={campusId} />
         ) : (
           <Empty
             title={t("Créez d’abord un établissement", "Create a campus first")}
             description={t(
-              "Choisissez ensuite cet établissement dans le menu latéral pour inviter son administrateur.",
-              "Then select that campus in the sidebar to invite its administrator.",
+              "Choisissez ensuite un établissement dans le menu latéral pour créer des liens de rôle.",
+              "Then select a campus in the sidebar to create role links.",
             )}
           />
         ))}{" "}
